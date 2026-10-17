@@ -1,0 +1,21 @@
+{
+  "name": "google-calendar-sync",
+  "version": "0.1.0",
+  "description": "Sync only the busy time blocks between Google Calendars across multiple accounts, bidirectionally.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "gcal-sync": "./src/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "sync": "node src/cli.js sync",
+    "setup": "node src/cli.js setup"
+  },
+  "dependencies": {
+    "googleapis": "^186.0.0"
+  }
+}

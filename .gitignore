@@ -1,0 +1,10 @@
+node_modules/
+
+# Never commit credentials. The real ones live in ~/.google-calendar-sync/,
+# but guard against copies being dropped into the repo during debugging.
+client.json
+tokens.json
+config.json
+last-run.json
+*.pem
+.env
