@@ -1,8 +1,21 @@
 #!/usr/bin/env node
 import { createRequire } from 'node:module';
-import { authClientForAccount, isAuthError, loadClientCredentials, loadTokens } from './auth.js';
+import { checkMeshAccess } from './access.js';
+import {
+  authClientForConfig,
+  isAuthError,
+  loadClientCredentials,
+  loadTokens,
+  readServiceAccountKey,
+} from './auth.js';
 import { createCalendarClient } from './calendar.js';
-import { expandPairs, loadConfig, mirrorTarget, validateConfig } from './config.js';
+import {
+  expandPairs,
+  isServiceAccountMode,
+  loadConfig,
+  mirrorTarget,
+  validateConfig,
+} from './config.js';
 import { installSchedule, scheduleStatus, uninstallSchedule } from './cron.js';
 import { acquireLock } from './lock.js';
 import { log } from './log.js';
@@ -19,6 +32,7 @@ Usage
   gcal-sync setup                    Open the local setup screen (connect accounts, set labels)
   gcal-sync sync [options]           Run one sync pass
   gcal-sync status                   Show configuration, schedule and last run
+  gcal-sync doctor                   Check that every calendar is reachable and writable
   gcal-sync install-cron             Schedule the sync (launchd on macOS, crontab elsewhere)
   gcal-sync uninstall-cron           Remove the schedule
 
@@ -53,14 +67,20 @@ function parseArgs(argv) {
   return { command: positional[0], flags };
 }
 
-/** Caches one authorised client per account for the whole run. */
-function makeClientFactory() {
+/**
+ * Caches one authorised client per account for the whole run. Under a service
+ * account every member shares a single credential, so the cache collapses to
+ * one entry.
+ */
+export function makeClientFactory(config) {
   const cache = new Map();
+  const shared = isServiceAccountMode(config);
   return async (accountId) => {
-    if (!cache.has(accountId)) {
-      cache.set(accountId, createCalendarClient(authClientForAccount(accountId)));
+    const key = shared ? '__service-account__' : accountId;
+    if (!cache.has(key)) {
+      cache.set(key, createCalendarClient(authClientForConfig(config, accountId)));
     }
-    return cache.get(accountId);
+    return cache.get(key);
   };
 }
 
@@ -125,7 +145,7 @@ async function cmdSync(flags) {
   try {
     const result = await runSync({
       config,
-      clientFor: makeClientFactory(),
+      clientFor: makeClientFactory(config),
       dryRun: Boolean(flags.dryRun),
       allowEmptySource: Boolean(flags.allowEmptySource),
       only: flags.only,
@@ -159,27 +179,43 @@ async function cmdStatus() {
   log.info(`gcal-sync ${version}`);
   log.info(`Config dir: ${files.config().replace(/\/config\.json$/, '')}`);
 
-  log.info(`OAuth client: ${loadClientCredentials() ? 'configured' : 'MISSING - run setup'}`);
-
   const config = loadConfig();
   if (!config) {
+    log.info(`OAuth client: ${loadClientCredentials() ? 'configured' : 'MISSING - run setup'}`);
     log.info('Config: none yet. Run `gcal-sync setup`.');
     return EXIT.CONFIG;
   }
 
   const { errors, warnings } = validateConfig(config);
-  const tokens = loadTokens();
 
-  log.info(`\nAccounts (${config.accounts.length}):`);
-  for (const account of config.accounts) {
-    const authorised = Boolean(tokens[account.id]?.refresh_token);
-    log.info(`  ${account.id}  ${account.email}  ${authorised ? 'authorised' : 'NOT AUTHORISED'}`);
+  if (isServiceAccountMode(config)) {
+    log.info('Auth mode: service account');
+    try {
+      const key = readServiceAccountKey(config.auth.keyFile);
+      log.info(`  key:     ${key.path}`);
+      log.info(`  address: ${key.clientEmail}`);
+      log.info('  Each calendar below must be shared with that address.');
+    } catch (err) {
+      log.error(`  ${errorMessage(err)}`);
+    }
+  } else {
+    log.info('Auth mode: OAuth');
+    log.info(`  client: ${loadClientCredentials() ? 'configured' : 'MISSING - run setup'}`);
+    const tokens = loadTokens();
+    log.info(`\nAccounts (${config.accounts.length}):`);
+    for (const account of config.accounts) {
+      const authorised = Boolean(tokens[account.id]?.refresh_token);
+      log.info(
+        `  ${account.id}  ${account.email}  ${authorised ? 'authorised' : 'NOT AUTHORISED'}`,
+      );
+    }
   }
 
   log.info(`\nCalendars (${config.members.length}):`);
   for (const m of config.members) {
+    const owner = isServiceAccountMode(config) ? '' : `account=${m.accountId}  `;
     log.info(
-      `  ${m.id}  ${m.label || '(no name)'}  account=${m.accountId}  ` +
+      `  ${m.id}  ${m.label || '(no name)'}  ${owner}` +
         `source=${m.sourceCalendarId}  mirrors→${mirrorTarget(m)} [${m.writeMode}]` +
         `${m.enabled === false ? '  DISABLED' : ''}`,
     );
@@ -210,6 +246,39 @@ async function cmdStatus() {
   return errors.length ? EXIT.CONFIG : EXIT.OK;
 }
 
+/**
+ * Verify we can actually reach every calendar before trusting a schedule.
+ * Mostly for service account mode, where access depends on manual sharing.
+ */
+async function cmdDoctor() {
+  const config = requireValidConfig();
+
+  if (isServiceAccountMode(config)) {
+    const key = readServiceAccountKey(config.auth.keyFile);
+    log.info(`Service account: ${key.clientEmail}`);
+    log.info('Share each calendar below with that address ("Make changes to events").\n');
+  }
+
+  const report = await checkMeshAccess(config, makeClientFactory(config));
+  for (const check of report.checks) {
+    const mark = check.ok ? 'OK  ' : 'FAIL';
+    const want = check.needWrite ? 'write' : 'read';
+    log.info(
+      `  ${mark} ${check.memberId} ${check.kind.padEnd(13)} ${check.calendarId}` +
+        `  (need ${want}, have ${check.role === 'unknown' ? '?' : check.role || '-'})`,
+    );
+    if (check.summary) log.info(`         name: ${check.summary}`);
+    if (check.error) log.error(`         ${check.error}`);
+  }
+
+  if (report.ok) {
+    log.info('\nAll calendars reachable with the access the sync needs.');
+    return EXIT.OK;
+  }
+  log.error('\nSome calendars are not usable yet. Fix the sharing above, then re-run.');
+  return EXIT.CONFIG;
+}
+
 async function cmdSetup() {
   const { startSetupServer } = await import('./server.js');
   await startSetupServer();
@@ -238,6 +307,8 @@ async function main() {
       return cmdSync(flags);
     case 'status':
       return cmdStatus();
+    case 'doctor':
+      return cmdDoctor();
     case 'setup':
       return cmdSetup();
     case 'install-cron':

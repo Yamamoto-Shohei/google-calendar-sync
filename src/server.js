@@ -3,14 +3,16 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import { google } from 'googleapis';
+import { checkCalendarAccess, checkMeshAccess } from './access.js';
 import {
   DEFAULT_PORT,
-  authClientForAccount,
+  authClientForConfig,
   consentUrl,
   forgetAccountTokens,
   loadClientCredentials,
   loadTokens,
   newOAuthClient,
+  readServiceAccountKey,
   redirectUri,
   saveClientCredentials,
   storeAccountTokens,
@@ -19,6 +21,7 @@ import { createCalendarClient } from './calendar.js';
 import {
   DEFAULT_CONFIG,
   expandPairs,
+  isServiceAccountMode,
   loadConfig,
   mirrorTarget,
   saveConfig,
@@ -132,8 +135,20 @@ function normaliseLabels(config) {
   return labels;
 }
 
+function clientFactory(config) {
+  const cache = new Map();
+  const shared = isServiceAccountMode(config);
+  return async (accountId) => {
+    const key = shared ? '__service-account__' : accountId;
+    if (!cache.has(key)) {
+      cache.set(key, createCalendarClient(authClientForConfig(config, accountId)));
+    }
+    return cache.get(key);
+  };
+}
+
 async function clientForAccount(accountId) {
-  return createCalendarClient(authClientForAccount(accountId));
+  return clientFactory(currentConfig())(accountId);
 }
 
 async function ensureMirrorCalendar(client, { sourceTimeZone }) {
@@ -159,7 +174,18 @@ export async function startSetupServer({ port = DEFAULT_PORT } = {}) {
       const config = currentConfig();
       const tokens = loadTokens();
       const { errors, warnings } = validateConfig(config);
+      let serviceAccount = null;
+      if (isServiceAccountMode(config) && config.auth.keyFile) {
+        try {
+          const key = readServiceAccountKey(config.auth.keyFile);
+          serviceAccount = { path: key.path, clientEmail: key.clientEmail, ok: true };
+        } catch (err) {
+          serviceAccount = { path: config.auth.keyFile, error: errorMessage(err), ok: false };
+        }
+      }
       return {
+        authMode: config.auth?.mode || 'oauth',
+        serviceAccount,
         hasClientCredentials: Boolean(loadClientCredentials()),
         config: { ...config, labels: normaliseLabels(config) },
         pairs: expandPairs(config).map((p) => ({
@@ -179,6 +205,32 @@ export async function startSetupServer({ port = DEFAULT_PORT } = {}) {
         configPath: files.config(),
         redirectUri: redirectUri(port),
       };
+    },
+
+    'POST /api/auth-mode': async (body) => {
+      const mode = body.mode === 'service-account' ? 'service-account' : 'oauth';
+      const config = currentConfig();
+      config.auth = { ...config.auth, mode };
+      saveConfig(config);
+      return { ok: true, mode };
+    },
+
+    'POST /api/service-account': async (body) => {
+      const keyFile = String(body.keyFile || '').trim();
+      if (!keyFile) throw new Error('Path to the service account JSON key is required.');
+      // Validate before saving, so a typo cannot leave the config unusable.
+      const key = readServiceAccountKey(keyFile);
+      const config = currentConfig();
+      config.auth = { mode: 'service-account', keyFile };
+      saveConfig(config);
+      return { ok: true, clientEmail: key.clientEmail, path: key.path };
+    },
+
+    'POST /api/doctor': async () => {
+      const config = currentConfig();
+      const { errors } = validateConfig(config);
+      if (errors.length) throw new Error(errors.join(' / '));
+      return await checkMeshAccess(config, clientFactory(config));
     },
 
     'POST /api/client': async (body) => {
@@ -228,23 +280,48 @@ export async function startSetupServer({ port = DEFAULT_PORT } = {}) {
 
     'POST /api/members': async (body) => {
       const config = currentConfig();
-      const accountId = String(body.accountId || '');
-      const sourceCalendarId = String(body.sourceCalendarId || '');
-      const writeMode = body.writeMode === 'primary' ? 'primary' : 'subcalendar';
-      if (!config.accounts.some((a) => a.id === accountId)) {
+      const serviceAccount = isServiceAccountMode(config);
+      const sourceCalendarId = String(body.sourceCalendarId || '').trim();
+      if (!sourceCalendarId) throw new Error('A source calendar is required.');
+
+      const accountId = serviceAccount ? null : String(body.accountId || '');
+      if (!serviceAccount && !config.accounts.some((a) => a.id === accountId)) {
         throw new Error(`Unknown account "${accountId}".`);
       }
-      if (!sourceCalendarId) throw new Error('A source calendar is required.');
-      if (config.members.some((m) => m.accountId === accountId && m.sourceCalendarId === sourceCalendarId)) {
+      if (
+        config.members.some(
+          (m) => m.sourceCalendarId === sourceCalendarId && m.accountId === accountId,
+        )
+      ) {
         throw new Error('That calendar is already part of the mesh.');
       }
 
       const client = await clientForAccount(accountId);
       const source = await client.getCalendar(sourceCalendarId);
 
+      let writeMode = body.writeMode === 'primary' ? 'primary' : 'subcalendar';
       let mirrorCalendarId = 'primary';
       let createdCalendar = false;
-      if (writeMode === 'subcalendar') {
+
+      if (serviceAccount) {
+        // A service account can only create calendars in its own account, not
+        // the user's, so the mirror calendar has to be made and shared by hand.
+        mirrorCalendarId = String(body.mirrorCalendarId || '').trim();
+        if (!mirrorCalendarId) {
+          throw new Error(
+            'In service-account mode, create the mirror calendar yourself, share it with ' +
+              'the service account, and paste its calendar id here.',
+          );
+        }
+        if (mirrorCalendarId === sourceCalendarId) {
+          writeMode = 'primary';
+        }
+        // Fail now rather than at the first scheduled sync.
+        const access = await checkCalendarAccess(client, mirrorCalendarId, { needWrite: true });
+        if (!access.ok) {
+          throw new Error(`Cannot write to ${mirrorCalendarId}: ${access.error}`);
+        }
+      } else if (writeMode === 'subcalendar') {
         const mirror = await ensureMirrorCalendar(client, { sourceTimeZone: source.timeZone });
         mirrorCalendarId = mirror.id;
         createdCalendar = mirror.created;

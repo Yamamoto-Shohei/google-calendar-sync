@@ -103,6 +103,32 @@ export function createCalendarClient(auth) {
       return res.data;
     },
 
+    /**
+     * The calendarList entry carries `accessRole`, which is the only cheap way
+     * to learn whether we may write. Returns null when the calendar is not in
+     * this identity's list -- common for a service account, which sees shared
+     * calendars only after they are added.
+     */
+    async getCalendarListEntry(calendarId) {
+      try {
+        const res = await withRetry('calendarList.get', () =>
+          api.calendarList.get({ calendarId }),
+        );
+        return res.data;
+      } catch (err) {
+        if (isNotFound(err)) return null;
+        throw err;
+      }
+    },
+
+    /** Register a shared calendar so it appears in calendarList with its role. */
+    async addToCalendarList(calendarId) {
+      const res = await withRetry('calendarList.insert', () =>
+        api.calendarList.insert({ requestBody: { id: calendarId } }),
+      );
+      return res.data;
+    },
+
     async listEvents({
       calendarId,
       timeMin,

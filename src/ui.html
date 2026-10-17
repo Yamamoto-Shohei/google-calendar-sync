@@ -94,8 +94,43 @@
 
   <div id="validation"></div>
 
+  <section>
+    <h2><span class="n">1</span>認証方式</h2>
+    <p class="hint">どちらでも同期の動作は同じです。迷ったらサービスアカウントを選んでください。</p>
+    <div class="stack">
+      <span class="check">
+        <input id="mode-sa" type="radio" name="authmode" value="service-account">
+        <label for="mode-sa" style="margin:0">
+          <strong>サービスアカウント（推奨）</strong> — 同意画面の設定も公開も不要。トークンが失効しない。
+          構築をスクリプト化できる。カレンダーを手で共有する手間が1回だけ発生します。
+        </label>
+      </span>
+      <span class="check">
+        <input id="mode-oauth" type="radio" name="authmode" value="oauth">
+        <label for="mode-oauth" style="margin:0">
+          <strong>OAuth</strong> — 画面で認可するだけでカレンダーを自動検出でき、ミラー用カレンダーも自動作成。
+          ただし同意画面を「本番環境に push」しないとトークンが7日で失効します。
+        </label>
+      </span>
+    </div>
+  </section>
+
+  <section id="sec-sa">
+    <h2><span class="n">2</span>サービスアカウントの鍵</h2>
+    <p class="hint">
+      <code>scripts/setup-gcp.sh</code> を実行すると、プロジェクト作成から鍵の発行まで一度に済みます。
+      出力された JSON 鍵のパスを入力してください。
+    </p>
+    <div class="row">
+      <div><label for="sa-key">鍵ファイルのパス</label>
+        <input id="sa-key" type="text" spellcheck="false" placeholder="~/.google-calendar-sync/service-account.json"></div>
+      <div class="narrow"><button id="save-sa" class="primary">登録</button></div>
+    </div>
+    <div id="sa-info"></div>
+  </section>
+
   <section id="sec-client">
-    <h2><span class="n">1</span>OAuth クライアント</h2>
+    <h2><span class="n">2</span>OAuth クライアント</h2>
     <p class="hint">
       Google Cloud で「デスクトップ アプリ」の OAuth クライアントを作成し、ID とシークレットを貼り付けてください。
       リダイレクト URI は <code id="redirect-uri"></code> です。
@@ -107,8 +142,8 @@
     </div>
   </section>
 
-  <section>
-    <h2><span class="n">2</span>Google アカウント</h2>
+  <section id="sec-accounts">
+    <h2><span class="n">3</span>Google アカウント</h2>
     <p class="hint">同期したいカレンダーを持つアカウントを、それぞれ認可してください。</p>
     <table><tbody id="accounts"></tbody></table>
     <div class="actions" style="margin-top:.9rem">
@@ -118,18 +153,16 @@
   </section>
 
   <section>
-    <h2><span class="n">3</span>同期するカレンダー</h2>
-    <p class="hint">
-      2つ以上追加すると、全対全（双方向）で同期されます。ミラーの書き込み先は
-      専用サブカレンダー（推奨・一括非表示やリセットができます）か、送信先の primary を選べます。
-    </p>
+    <h2><span class="n">4</span>同期するカレンダー</h2>
+    <p class="hint">2つ以上追加すると、全対全（双方向）で同期されます。</p>
     <table>
       <thead><tr>
-        <th>ID</th><th>名前</th><th>アカウント</th><th>同期元</th><th>ミラー先</th><th class="right"></th>
+        <th>ID</th><th>名前</th><th>所有</th><th>同期元</th><th>ミラー先</th><th class="right"></th>
       </tr></thead>
       <tbody id="members"></tbody>
     </table>
-    <div class="row" style="margin-top:1rem">
+
+    <div id="add-oauth" class="row" style="margin-top:1rem">
       <div><label for="m-account">アカウント</label><select id="m-account"></select></div>
       <div><label for="m-calendar">同期元カレンダー</label><select id="m-calendar"></select></div>
       <div><label for="m-mode">ミラー書き込み先</label><select id="m-mode">
@@ -138,10 +171,30 @@
       </select></div>
       <div class="narrow"><button id="add-member" class="primary">追加</button></div>
     </div>
+
+    <div id="add-sa" style="margin-top:1rem">
+      <div class="note warn" id="sa-share-hint"></div>
+      <p class="hint" style="margin-top:.8rem">
+        カレンダー ID は Google カレンダーの「設定と共有」→「カレンダーの統合」で確認できます。
+        メインカレンダーならメールアドレスそのもの、サブカレンダーなら
+        <code>...@group.calendar.google.com</code> 形式です。
+      </p>
+      <div class="row">
+        <div><label for="sa-source">同期元カレンダー ID</label>
+          <input id="sa-source" type="text" spellcheck="false" placeholder="you@example.com"></div>
+        <div><label for="sa-mirror">ミラー先カレンダー ID</label>
+          <input id="sa-mirror" type="text" spellcheck="false" placeholder="xxxx@group.calendar.google.com"></div>
+        <div class="narrow"><button id="add-member-sa" class="primary">追加</button></div>
+      </div>
+      <p class="hint" style="margin:.6rem 0 0">
+        ミラー先は、そのアカウントで作ったサブカレンダーを同じく共有しておくのが推奨です
+        （一括非表示とリセットができます）。同期元と同じ ID を入れると primary 直書き相当になります。
+      </p>
+    </div>
   </section>
 
   <section>
-    <h2><span class="n">4</span>埋め込む文言</h2>
+    <h2><span class="n">5</span>埋め込む文言</h2>
     <p class="hint">
       行が送信元、列が送信先です。「行のカレンダーの予定が、列のカレンダーにどう表示されるか」を入力します。
       空欄にすると既定文言を使います。<code>{summary}</code> <code>{start}</code> <code>{end}</code>
@@ -154,7 +207,7 @@
   </section>
 
   <section>
-    <h2><span class="n">5</span>同期の設定</h2>
+    <h2><span class="n">6</span>同期の設定</h2>
     <div class="row" style="margin-bottom:1rem">
       <div><label for="months">同期範囲（今日から何ヶ月先まで）</label><input id="months" type="number" min="1" max="24"></div>
       <div><label for="interval">同期間隔（分）</label><input id="interval" type="number" min="5" max="1440"></div>
@@ -174,8 +227,9 @@
   </section>
 
   <section>
-    <h2><span class="n">6</span>実行とスケジュール</h2>
+    <h2><span class="n">7</span>実行とスケジュール</h2>
     <div class="actions">
+      <button id="doctor">アクセス確認</button>
       <button id="dry-run">差分を確認（dry run）</button>
       <button id="sync-now" class="primary">今すぐ同期</button>
       <span class="spacer"></span>
@@ -232,10 +286,14 @@ function report(err) {
   setOutput(`エラー: ${err.message}`);
 }
 
+const isServiceAccount = () => state.authMode === 'service-account';
+
 async function refresh() {
   state = await api('GET', '/api/state');
+  renderMode();
   renderValidation();
   renderClient();
+  renderServiceAccount();
   renderAccounts();
   renderMembers();
   renderMatrix();
@@ -243,6 +301,46 @@ async function refresh() {
   renderSchedule();
   $('config-path').textContent = state.configPath;
   $('redirect-uri').textContent = state.redirectUri;
+}
+
+/** Only the sections that belong to the active auth mode are shown. */
+function renderMode() {
+  const sa = isServiceAccount();
+  $('mode-sa').checked = sa;
+  $('mode-oauth').checked = !sa;
+  $('sec-sa').hidden = !sa;
+  $('add-sa').hidden = !sa;
+  $('sec-client').hidden = sa;
+  $('sec-accounts').hidden = sa;
+  $('add-oauth').hidden = sa;
+}
+
+function renderServiceAccount() {
+  const host = $('sa-info');
+  const hint = $('sa-share-hint');
+  host.replaceChildren();
+  hint.replaceChildren();
+  if (!isServiceAccount()) return;
+
+  const info = state.serviceAccount;
+  if (!info) {
+    host.append(el('div', { class: 'note warn', text: '鍵ファイルが未登録です。' }));
+    hint.append(el('span', { text: 'まず上で鍵ファイルを登録してください。' }));
+    return;
+  }
+  if (!info.ok) {
+    host.append(el('div', { class: 'note err', text: info.error }));
+    return;
+  }
+  host.append(el('div', { class: 'note ok' }, [
+    el('div', { text: `登録済み: ${info.path}` }),
+    el('div', {}, [
+      el('span', { text: '共有先アドレス: ' }),
+      el('code', { text: info.clientEmail }),
+    ]),
+  ]));
+  hint.append(el('div', { text: '同期する各カレンダーの「設定と共有」で、下記アドレスに「予定の変更権限」を付与してください。' }));
+  hint.append(el('code', { text: info.clientEmail }));
 }
 
 function renderValidation() {
@@ -258,6 +356,7 @@ function renderValidation() {
 }
 
 function renderClient() {
+  if (isServiceAccount()) return;
   const configured = state.hasClientCredentials;
   $('sec-client').style.opacity = configured ? '.72' : '1';
   $('save-client').textContent = configured ? '更新' : '保存';
@@ -266,6 +365,7 @@ function renderClient() {
 }
 
 function renderAccounts() {
+  if (isServiceAccount()) return;
   const host = $('accounts');
   host.replaceChildren();
   if (!state.accounts.length) {
@@ -332,12 +432,14 @@ function renderMembers() {
     host.append(el('tr', { style: member.enabled === false ? 'opacity:.5' : '' }, [
       el('td', {}, el('code', { text: member.id })),
       el('td', { text: member.label || '' }),
-      el('td', { text: account ? account.email : member.accountId }),
+      el('td', { text: account ? account.email : isServiceAccount() ? 'サービスアカウント' : member.accountId }),
       el('td', {}, el('code', { text: member.sourceCalendarId })),
-      el('td', {}, el('span', {
-        class: 'pill',
-        text: member.writeMode === 'primary' ? 'primary 直書き' : 'サブカレンダー',
-      })),
+      el('td', {}, isServiceAccount()
+        ? el('code', { text: member.mirrorTarget })
+        : el('span', {
+            class: 'pill',
+            text: member.writeMode === 'primary' ? 'primary 直書き' : 'サブカレンダー',
+          })),
       el('td', { class: 'right' }, [
         el('button', {
           class: 'link',
@@ -458,6 +560,66 @@ async function runSync(dryRun, button) {
     button.textContent = label;
   }
 }
+
+for (const radio of [$('mode-sa'), $('mode-oauth')]) {
+  radio.addEventListener('change', async () => {
+    try {
+      await api('POST', '/api/auth-mode', { mode: radio.value });
+      setOutput(radio.value === 'service-account'
+        ? 'サービスアカウント方式に切り替えました。鍵ファイルを登録してください。'
+        : 'OAuth 方式に切り替えました。');
+      await refresh();
+    } catch (err) { report(err); }
+  });
+}
+
+$('save-sa').addEventListener('click', async () => {
+  try {
+    const result = await api('POST', '/api/service-account', { keyFile: $('sa-key').value });
+    setOutput(`鍵を登録しました。各カレンダーを ${result.clientEmail} に共有してください。`);
+    $('sa-key').value = '';
+    await refresh();
+  } catch (err) { report(err); }
+});
+
+$('add-member-sa').addEventListener('click', async () => {
+  try {
+    await api('POST', '/api/members', {
+      sourceCalendarId: $('sa-source').value,
+      mirrorCalendarId: $('sa-mirror').value,
+    });
+    $('sa-source').value = '';
+    $('sa-mirror').value = '';
+    setOutput('カレンダーを追加しました。');
+    await refresh();
+  } catch (err) { report(err); }
+});
+
+$('doctor').addEventListener('click', async (e) => {
+  const button = e.currentTarget;
+  button.disabled = true;
+  setOutput('確認中…');
+  try {
+    const report_ = await api('POST', '/api/doctor');
+    const lines = [`認証方式: ${report_.mode}`, ''];
+    for (const check of report_.checks) {
+      const need = check.needWrite ? '書き込み' : '読み取り';
+      lines.push(`  ${check.ok ? 'OK  ' : 'NG  '} ${check.memberId} ${check.kind}  ${check.calendarId}`);
+      lines.push(`        必要=${need}  実際=${check.role === 'unknown' ? '不明' : check.role || '-'}` +
+        (check.summary ? `  名前=${check.summary}` : ''));
+      if (check.error) lines.push(`        ${check.error}`);
+    }
+    lines.push('');
+    lines.push(report_.ok
+      ? 'すべてのカレンダーに必要な権限でアクセスできます。'
+      : '権限が足りないカレンダーがあります。共有設定を見直してください。');
+    setOutput(lines.join('\n'));
+  } catch (err) {
+    report(err);
+  } finally {
+    button.disabled = false;
+  }
+});
 
 $('save-client').addEventListener('click', async () => {
   try {

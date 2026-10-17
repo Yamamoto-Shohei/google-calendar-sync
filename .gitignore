@@ -6,5 +6,8 @@ client.json
 tokens.json
 config.json
 last-run.json
+service-account.json
+*-service-account.json
 *.pem
+*.p12
 .env
