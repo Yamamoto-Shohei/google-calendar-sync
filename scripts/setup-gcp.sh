@@ -12,53 +12,99 @@
 # script prints the address and the exact steps at the end.
 #
 # Usage:
-#   scripts/setup-gcp.sh [--project-id ID] [--key-out PATH] [--sa-name NAME]
-#
-set -euo pipefail
+#   scripts/setup-gcp.sh [--project-id ID] [--key-out PATH] [--sa-name NAME] [--yes]
+
+set -euE -o pipefail
+# -E so the trap is inherited by functions. Without the trap, any failure under
+# `set -e` exits silently with no output at all, which is impossible to debug.
+trap 'status=$?; echo "error: aborted at line $LINENO (exit $status)" >&2; exit $status' ERR
 
 PROJECT_ID=""
 SA_NAME="gcal-sync"
 KEY_OUT="${GCAL_SYNC_HOME:-$HOME/.google-calendar-sync}/service-account.json"
+ASSUME_YES=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project-id) PROJECT_ID="$2"; shift 2 ;;
     --sa-name)    SA_NAME="$2";    shift 2 ;;
     --key-out)    KEY_OUT="$2";    shift 2 ;;
+    -y|--yes)     ASSUME_YES=1;    shift ;;
     # Print the header comment block, stopping at the first line of code.
     -h|--help)    awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
-die() { echo "error: $*" >&2; exit 1; }
+# Clear the ERR trap first: this exit is deliberate and already explained, so
+# the trap's "aborted at line N" would only bury the real message.
+die() { trap - ERR; echo "error: $*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }
 
 command -v gcloud >/dev/null 2>&1 || die \
   "gcloud not found. Install the Google Cloud CLI: https://cloud.google.com/sdk/docs/install"
 
-if ! gcloud auth list --filter=status:ACTIVE --format='value(account)' | grep -q .; then
-  die "Not logged in to gcloud. Run: gcloud auth login"
+# Deliberately not piped into grep: grep -q can exit before gcloud finishes,
+# and pipefail would then report the resulting SIGPIPE as a login failure.
+ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null || true)"
+[[ -n "$ACTIVE_ACCOUNT" ]] || die "Not logged in to gcloud. Run: gcloud auth login"
+
+# An account can be listed as ACTIVE while its token has expired and needs
+# reauthentication. Minting a token proves the credentials actually work --
+# otherwise the first real API call hangs waiting to prompt for reauth.
+if ! gcloud auth print-access-token >/dev/null 2>&1; then
+  die "gcloud credentials for $ACTIVE_ACCOUNT have expired. Run: gcloud auth login"
 fi
 
 # A project id must be globally unique, so derive a default with a random tail.
+# od rather than `tr | head`: head closing the pipe early kills tr with SIGPIPE,
+# which pipefail turns into a silent abort of this whole script.
 if [[ -z "$PROJECT_ID" ]]; then
-  PROJECT_ID="gcal-sync-$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 8)"
+  PROJECT_ID="gcal-sync-$(od -An -tx1 -N4 /dev/urandom | tr -d ' \n')"
 fi
 
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
+cat <<EOF
+
+This will create, under gcloud account "$ACTIVE_ACCOUNT":
+
+  project          $PROJECT_ID
+  service account  $SA_EMAIL
+  key file         $KEY_OUT
+
+If that is a work account and you meant to use a personal one, stop here and
+run:  gcloud auth login
+
+EOF
+
+if [[ "$ASSUME_YES" -eq 0 ]]; then
+  [[ -t 0 ]] || die "Not running interactively. Re-run with --yes to proceed."
+  # A failed read means stdin closed before answering; treat that as "no"
+  # rather than letting set -e abort with an opaque line number.
+  read -r -p "Continue? [y/N] " reply \
+    || die "No answer received. Re-run with --yes to proceed."
+  [[ "$reply" =~ ^[Yy]$ ]] || die "Cancelled."
+fi
+
 step "Project: $PROJECT_ID"
 if gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1; then
   echo "    already exists, reusing"
-else
-  gcloud projects create "$PROJECT_ID" --name="gcal-sync"
+elif gcloud projects create "$PROJECT_ID" --name="gcal-sync"; then
   echo "    created"
+else
+  die "Could not create the project.
+  A work/Workspace account often cannot create projects outside its
+  organisation. Either ask an admin, pass an existing project with
+  --project-id, or switch to a personal account:  gcloud auth login"
 fi
 
 step "Enabling the Google Calendar API"
 # Needs no billing account: the Calendar API has no usage charges.
-gcloud services enable calendar-json.googleapis.com --project="$PROJECT_ID"
+if ! gcloud services enable calendar-json.googleapis.com --project="$PROJECT_ID"; then
+  die "Could not enable the Calendar API on $PROJECT_ID.
+  Check that you have the Service Usage Admin role on that project."
+fi
 echo "    enabled"
 
 step "Service account: $SA_EMAIL"
