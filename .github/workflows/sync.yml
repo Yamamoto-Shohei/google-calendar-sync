@@ -35,11 +35,18 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      GCAL_SYNC_HOME: ${{ runner.temp }}/gcal-sync
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Put the config directory on the runner's temp disk
+        # Set here rather than in a job-level `env:`, where `runner.temp` is not
+        # in scope -- referencing it there makes the whole file fail to parse,
+        # so every run dies in under a second before any step executes.
+        #
+        # The temp dir, not the workspace: credentials must not sit inside a
+        # checkout that later steps or caches could pick up.
+        run: echo "GCAL_SYNC_HOME=$RUNNER_TEMP/gcal-sync" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -111,4 +118,8 @@ jobs:
       - name: Remove credentials from the runner
         # Runners are ephemeral, but do not rely on that for secret material.
         if: always()
-        run: rm -rf "$GCAL_SYNC_HOME"
+        # Guarded because `always()` also fires when the step that sets
+        # GCAL_SYNC_HOME never ran, and `rm -rf` on an empty path is not
+        # something to leave to chance.
+        run: |
+          if [ -n "${GCAL_SYNC_HOME:-}" ]; then rm -rf "$GCAL_SYNC_HOME"; fi
