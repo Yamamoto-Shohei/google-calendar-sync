@@ -10,7 +10,12 @@ name: sync
 on:
   schedule:
     # Offset from :00, where scheduled workflows queue the longest.
-    - cron: '7,37 * * * *'
+    #
+    # Whoever last edits this line owns the schedule: GitHub runs it as that
+    # user, and if they cannot reach the repository it silently never fires --
+    # no error, no notification, `state` still "active", while push and manual
+    # triggers keep working. Keep this line owned by an account with access.
+    - cron: '8,38 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
