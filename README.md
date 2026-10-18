@@ -172,9 +172,47 @@ gcal-sync uninstall-cron        # 定期実行を解除
 
 終了コード: `0` 成功 / `1` 一部失敗 / `2` 設定不正・未認可。
 
-## サーバレス運用（GitHub Actions）
+## サーバレス運用
 
-自分の PC を動かし続けずに同期したい場合、**GitHub Actions で無料・サーバレスに運用できます**。
+自分の PC を動かし続けずに同期したい場合、選択肢は2つあります。**定時性が要るなら Cloud Run、無料と手軽さを優先するなら GitHub Actions**です。
+
+| | Cloud Run Jobs + Cloud Scheduler | GitHub Actions |
+| --- | --- | --- |
+| 定時性 | 秒単位で正確 | 数分〜数十分の遅延、**実行が落ちることもある** |
+| 費用 | 無料枠内（月数十円程度の端数は出る） | 完全無料 |
+| 前提 | GCP の課金有効化（カード登録） | なし |
+| 設定 | `scripts/setup-cloud-run.sh` | `scripts/push-secrets.sh` |
+
+GitHub Actions の `schedule` はベストエフォートです。負荷時には遅延ではなく**実行そのものが捨てられます**。さらに、スケジュールは「cron 行を最後に編集したユーザー」の権限で動くため、そのアカウントがリポジトリにアクセスできないと**エラーも通知もないまま一切発火しなくなります**（手動実行と push は正常に動き続けるので、気づきにくい）。確実に回したいなら Cloud Run を選んでください。
+
+### Cloud Run Jobs + Cloud Scheduler
+
+```bash
+gcloud auth login
+gcloud billing projects link PROJECT_ID --billing-account ACCOUNT_ID   # 未設定なら
+scripts/setup-cloud-run.sh --project PROJECT_ID
+```
+
+スクリプトが行うこと（冪等なので再実行可）:
+
+1. 必要な API の有効化（Run / Build / Artifact Registry / Secret Manager / Scheduler）
+2. 認証情報を Secret Manager に保存（認証方式に必要なものだけ）
+3. サービスアカウントを2つ作成 — ジョブ実行用と、スケジューラ用
+4. Cloud Run ジョブをデプロイ（`Dockerfile` からビルド、シークレットは環境変数として注入）
+5. Cloud Scheduler から15分おきに `jobs:run` を叩く設定
+
+権限は絞ってあります。ジョブ用サービスアカウントには**そのシークレットだけ**の読み取り権限、スケジューラ用には**そのジョブだけ**の実行権限を付与します。
+
+動作確認:
+
+```bash
+gcloud scheduler jobs run gcal-sync-tick --location asia-northeast1
+gcloud run jobs executions list --job gcal-sync --region asia-northeast1
+```
+
+**再認可や設定変更のあとは、スクリプトを再実行してください**（Secret Manager に新しいバージョンが追加され、ジョブが再デプロイされます）。
+
+### GitHub Actions
 
 この同期は**状態をカレンダーの予定自身に持つ**ため、ホストすべき DB もディスクもありません。ランナーが設定ファイルを Secrets から書き出して `sync` を1回実行するだけで成立します。
 
@@ -218,10 +256,11 @@ gh run watch
 
 ### 注意点
 
-- **Actions の cron は遅延します。** 定時には動かず、数分〜数十分ずれることがあります。同期は冪等なので遅延しても壊れませんが、「30分ごと」は「おおむね30分ごと」です。厳密な定時実行が要るなら Cloud Scheduler のほうが正確です（ただし GCP の課金有効化＝カード登録が必要）。
-- **Secrets は全カレンダーへの読み書き権限を持ちます。** 自分が管理するプライベートリポジトリでのみ使ってください。
+- **Actions の cron は遅延し、落ちます。** 数分〜数十分ずれるだけでなく、負荷時には実行自体がスキップされます。同期は冪等なので壊れはしませんが、「30分ごと」は保証されません。
+- **cron 行の所有者に注意してください。** スケジュールは cron 行を最後に編集したユーザーの権限で実行されます。そのアカウントがリポジトリにアクセスできないと、`state` は `active` のまま、手動実行も push も成功するのに、スケジュールだけが無言で発火しなくなります。コミットのメールアドレスが別アカウントに紐付いている場合に起こります（`gh api repos/OWNER/REPO/commits/SHA --jq .author.login` で確認できます）。
+- **Secrets は全カレンダーへの読み書き権限を持ちます。** 自分が管理するリポジトリでのみ使ってください。
 - ワークフローは `concurrency` で多重実行を防いでいます（ランナー間ではローカルのロックファイルが効かないため）。
-- `doctor` は手動実行時のみ走ります。スケジュール実行で毎回走らせると、一時的な失敗が本来成功する同期を止めてしまうためです。
+- `doctor` は手動実行時に `doctor` 入力を有効にしたときだけ走ります。カレンダー ID（＝メールアドレス）を出力するため、公開リポジトリでは実行ログから読めてしまうので既定はオフです。
 - 同期が失敗すると GitHub から通知メールが届きます（終了コードが非ゼロになるため）。
 
 ### ローカル実行との併用

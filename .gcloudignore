@@ -1,0 +1,19 @@
+# Everything the build does not need. Keeps the upload small and, more to the
+# point, keeps local credentials out of a build context by accident.
+.git/
+.github/
+node_modules/
+site/
+test/
+.firebaserc
+firebase.json
+README.md
+*.json.bak
+client.json
+tokens.json
+config.json
+last-run.json
+service-account.json
+*.pem
+*.p12
+.env
