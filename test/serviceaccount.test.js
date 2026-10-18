@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { checkCalendarAccess, checkMeshAccess } from '../src/access.js';
+import { defaultServiceAccountKeyPath, resolveKeyFile } from '../src/auth.js';
 import { isServiceAccountMode, validateConfig, withDefaults } from '../src/config.js';
 import { runSync } from '../src/sync.js';
 import { isMirror } from '../src/mirror.js';
@@ -71,10 +72,29 @@ test('a service account mesh validates without any accounts', () => {
   assert.equal(ok, true, errors.join('; '));
 });
 
-test('service account mode requires a key file', () => {
-  const { ok, errors } = validateConfig(saConfig({ auth: { mode: 'service-account' } }));
-  assert.equal(ok, false);
-  assert.ok(errors.some((e) => e.includes('requires auth.keyFile')));
+test('a config with no keyFile is valid and resolves to the standard path', () => {
+  // Omitting keyFile is the portable form: config.json then carries no
+  // machine-specific path, so the same file works locally and on CI.
+  const config = saConfig({ auth: { mode: 'service-account' } });
+  const { ok, errors } = validateConfig(config);
+  assert.equal(ok, true, errors.join('; '));
+  assert.equal(resolveKeyFile(config), defaultServiceAccountKeyPath());
+});
+
+test('an explicit keyFile wins over the default, and the env var wins over both', () => {
+  const config = saConfig({ auth: { mode: 'service-account', keyFile: '/explicit/key.json' } });
+  assert.equal(resolveKeyFile(config), '/explicit/key.json');
+
+  process.env.GCAL_SERVICE_ACCOUNT_KEY_FILE = '/from/env.json';
+  try {
+    assert.equal(resolveKeyFile(config), '/from/env.json');
+    assert.equal(
+      resolveKeyFile(saConfig({ auth: { mode: 'service-account' } })),
+      '/from/env.json',
+    );
+  } finally {
+    delete process.env.GCAL_SERVICE_ACCOUNT_KEY_FILE;
+  }
 });
 
 test('an unknown auth mode is rejected', () => {

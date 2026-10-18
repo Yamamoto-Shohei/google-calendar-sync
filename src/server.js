@@ -7,6 +7,7 @@ import { checkCalendarAccess, checkMeshAccess } from './access.js';
 import {
   DEFAULT_PORT,
   authClientForConfig,
+  defaultServiceAccountKeyPath,
   detectServiceAccountKey,
   consentUrl,
   forgetAccountTokens,
@@ -14,6 +15,7 @@ import {
   loadTokens,
   newOAuthClient,
   readServiceAccountKey,
+  resolveKeyFile,
   redirectUri,
   saveClientCredentials,
   storeAccountTokens,
@@ -176,17 +178,17 @@ export async function startSetupServer({ port = DEFAULT_PORT } = {}) {
       const tokens = loadTokens();
       const { errors, warnings } = validateConfig(config);
       let serviceAccount = null;
-      if (isServiceAccountMode(config) && config.auth.keyFile) {
+      if (isServiceAccountMode(config)) {
         try {
-          const key = readServiceAccountKey(config.auth.keyFile);
+          const key = readServiceAccountKey(resolveKeyFile(config));
           serviceAccount = { path: key.path, clientEmail: key.clientEmail, ok: true };
         } catch (err) {
-          serviceAccount = { path: config.auth.keyFile, error: errorMessage(err), ok: false };
+          serviceAccount = { path: resolveKeyFile(config), error: errorMessage(err), ok: false };
         }
       }
       // setup-gcp.sh writes the key to a known path; offer it rather than
       // making the user retype what the script just printed.
-      const detected = config.auth?.keyFile ? null : detectServiceAccountKey();
+      const detected = serviceAccount?.ok ? null : detectServiceAccountKey();
       return {
         authMode: config.auth?.mode || 'oauth',
         serviceAccount,
@@ -226,9 +228,13 @@ export async function startSetupServer({ port = DEFAULT_PORT } = {}) {
       // Validate before saving, so a typo cannot leave the config unusable.
       const key = readServiceAccountKey(keyFile);
       const config = currentConfig();
-      config.auth = { mode: 'service-account', keyFile };
+      // Record no path at all when the key sits at the standard location, so
+      // config.json stays free of machine-specific paths and can be reused
+      // as-is on another machine or a CI runner.
+      const portable = key.path === defaultServiceAccountKeyPath();
+      config.auth = { mode: 'service-account', keyFile: portable ? null : keyFile };
       saveConfig(config);
-      return { ok: true, clientEmail: key.clientEmail, path: key.path };
+      return { ok: true, clientEmail: key.clientEmail, path: key.path, portable };
     },
 
     'POST /api/doctor': async () => {

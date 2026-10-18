@@ -191,10 +191,24 @@ export function serviceAccountAuthClient(keyFile) {
   return new google.auth.GoogleAuth({ keyFile: resolved, scopes: SCOPES });
 }
 
+/**
+ * Which key file to use, in precedence order: the env override, the configured
+ * path, then the standard location. Leaving keyFile unset is the portable
+ * choice -- config.json then carries no machine-specific path, so the same file
+ * works on a laptop and on a CI runner.
+ */
+export function resolveKeyFile(config) {
+  return (
+    process.env.GCAL_SERVICE_ACCOUNT_KEY_FILE ||
+    config?.auth?.keyFile ||
+    defaultServiceAccountKeyPath()
+  );
+}
+
 /** Dispatch on the configured auth mode. Accounts only matter under OAuth. */
 export function authClientForConfig(config, accountId) {
   if (config.auth?.mode === 'service-account') {
-    return serviceAccountAuthClient(config.auth.keyFile);
+    return serviceAccountAuthClient(resolveKeyFile(config));
   }
   return authClientForAccount(accountId);
 }

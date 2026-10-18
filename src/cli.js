@@ -8,6 +8,7 @@ import {
   loadClientCredentials,
   loadTokens,
   readServiceAccountKey,
+  resolveKeyFile,
 } from './auth.js';
 import { createCalendarClient } from './calendar.js';
 import {
@@ -201,7 +202,7 @@ async function cmdStatus() {
   if (isServiceAccountMode(config)) {
     log.info('Auth mode: service account');
     try {
-      const key = readServiceAccountKey(config.auth.keyFile);
+      const key = readServiceAccountKey(resolveKeyFile(config));
       log.info(`  key:     ${key.path}`);
       log.info(`  address: ${key.clientEmail}`);
       log.info('  Each calendar below must be shared with that address.');
@@ -264,7 +265,7 @@ async function cmdDoctor() {
   const config = requireValidConfig();
 
   if (isServiceAccountMode(config)) {
-    const key = readServiceAccountKey(config.auth.keyFile);
+    const key = readServiceAccountKey(resolveKeyFile(config));
     log.info(`Service account: ${key.clientEmail}`);
     log.info('Share each calendar below with that address ("Make changes to events").\n');
   }

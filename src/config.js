@@ -108,9 +108,9 @@ export function validateConfig(config) {
   if (!['oauth', 'service-account'].includes(config.auth?.mode)) {
     errors.push('auth.mode must be "oauth" or "service-account".');
   }
-  if (serviceAccount && !config.auth?.keyFile) {
-    errors.push('auth.mode "service-account" requires auth.keyFile.');
-  }
+  // keyFile is optional on purpose: left unset it resolves to the standard
+  // path inside the config directory, which keeps config.json free of
+  // machine-specific absolute paths so it can be committed and reused on CI.
   // A service account reaches every calendar shared with it, so there are no
   // per-account authorisations to collect.
   if (!serviceAccount && !config.accounts.length) {

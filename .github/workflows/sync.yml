@@ -1,0 +1,114 @@
+name: sync
+
+# Serverless operation: the sync keeps no local state -- it lives in the mirror
+# events themselves -- so a scheduled runner with nothing mounted is enough.
+#
+# Interval note: Actions bills per job rounded UP to the minute, so cost tracks
+# the number of runs, not their duration. Twice an hour is 1,440 runs/month,
+# which fits the 2,000 free minutes a private repo gets. Every 15 minutes would
+# be 2,880 and overrun it.
+on:
+  schedule:
+    # Offset from :00, where scheduled workflows queue the longest.
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Show the diff without writing anything'
+        type: boolean
+        default: false
+      verbose:
+        description: 'Verbose logging'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Never let a slow run overlap the next tick: two syncs at once could both see
+# a mirror as missing and create it twice.
+concurrency:
+  group: gcal-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GCAL_SYNC_HOME: ${{ runner.temp }}/gcal-sync
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci --omit=dev
+
+      - name: Materialise config from secrets
+        env:
+          # Passed as env, not interpolated into the script: secret contents
+          # never become part of the shell command, so quoting in the JSON
+          # cannot break the step or leak into the log.
+          GCAL_CONFIG: ${{ secrets.GCAL_CONFIG }}
+          GCAL_TOKENS: ${{ secrets.GCAL_TOKENS }}
+          GCAL_CLIENT: ${{ secrets.GCAL_CLIENT }}
+          GCAL_SERVICE_ACCOUNT: ${{ secrets.GCAL_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GCAL_CONFIG:-}" ]; then
+            echo "::error::Secret GCAL_CONFIG is not set. Run scripts/push-secrets.sh locally." >&2
+            exit 1
+          fi
+
+          mkdir -p "$GCAL_SYNC_HOME"
+          chmod 700 "$GCAL_SYNC_HOME"
+          umask 077
+
+          write() {
+            printf '%s' "$2" > "$GCAL_SYNC_HOME/$1"
+            chmod 600 "$GCAL_SYNC_HOME/$1"
+            # Fail here rather than with a confusing parse error mid-sync.
+            node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' \
+              "$GCAL_SYNC_HOME/$1" \
+              || { echo "::error::$1 is not valid JSON. Re-run scripts/push-secrets.sh." >&2; exit 1; }
+          }
+
+          # Explicit ifs rather than `[ -n x ] && write`: an AND-OR list whose
+          # test fails returns non-zero, which aborts the step under `set -e`
+          # if it happens to be the last line.
+          write config.json "$GCAL_CONFIG"
+          if [ -n "${GCAL_TOKENS:-}" ]; then write tokens.json "$GCAL_TOKENS"; fi
+          if [ -n "${GCAL_CLIENT:-}" ]; then write client.json "$GCAL_CLIENT"; fi
+          if [ -n "${GCAL_SERVICE_ACCOUNT:-}" ]; then
+            write service-account.json "$GCAL_SERVICE_ACCOUNT"
+          fi
+
+          # Report the mode without echoing anything secret.
+          node -e '
+            const c = JSON.parse(require("fs").readFileSync(process.env.GCAL_SYNC_HOME + "/config.json","utf8"));
+            console.log("auth mode:", c.auth?.mode ?? "oauth");
+            console.log("calendars:", (c.members ?? []).length);
+          '
+
+      - name: Verify calendar access
+        # Manual runs only. On the schedule this would add an API round trip
+        # per calendar every half hour, and a transient failure would block a
+        # sync that would otherwise have worked.
+        if: github.event_name == 'workflow_dispatch'
+        run: node src/cli.js doctor
+
+      - name: Sync
+        run: |
+          node src/cli.js sync \
+            ${{ inputs.dry_run && '--dry-run' || '' }} \
+            ${{ inputs.verbose && '--verbose' || '' }}
+
+      - name: Remove credentials from the runner
+        # Runners are ephemeral, but do not rely on that for secret material.
+        if: always()
+        run: rm -rf "$GCAL_SYNC_HOME"
