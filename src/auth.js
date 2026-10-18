@@ -14,8 +14,14 @@ export const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
 export const DEFAULT_PORT = Number(process.env.GCAL_SYNC_PORT || 4765);
 
+/**
+ * The loopback IP rather than "localhost" on purpose: localhost can resolve to
+ * ::1 first, and the setup server listens on 127.0.0.1 only, so the browser
+ * would be redirected to an address nothing is bound to. Google's own guidance
+ * for installed apps prefers the literal loopback address for this reason.
+ */
 export function redirectUri(port = DEFAULT_PORT) {
-  return `http://localhost:${port}/oauth/callback`;
+  return `http://127.0.0.1:${port}/oauth/callback`;
 }
 
 /**

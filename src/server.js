@@ -483,7 +483,8 @@ export async function startSetupServer({ port = DEFAULT_PORT } = {}) {
     server.listen(port, '127.0.0.1', resolve);
   });
 
-  const url = `http://localhost:${port}/?t=${token}`;
+  // 127.0.0.1, not localhost: see redirectUri() in auth.js.
+  const url = `http://127.0.0.1:${port}/?t=${token}`;
   log.info(`Setup screen: ${url}`);
   log.info('Press Ctrl+C when you are done.');
   openBrowser(url);
