@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CalMesh — 複数の Google カレンダーの「予定あり」だけを同期する</title>
+<meta name="description" content="複数の Google カレンダー間で、予定のタイトルや参加者を持ち出さずに「予定あり」のブロックだけを相互に同期するオープンソースのツールです。">
+<link rel="canonical" href="https://calmesh.rcat.app/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://calmesh.rcat.app/">
+<meta property="og:title" content="CalMesh — 複数の Google カレンダーの「予定あり」だけを同期する">
+<meta property="og:description" content="予定のタイトルも参加者も持ち出さずに、空き時間だけを揃えます。アカウントをまたいだダブルブッキングを防ぐためのオープンソースのツールです。">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="/">CalMesh</a>
+    <nav>
+      <a href="/privacy">プライバシーポリシー</a>
+      <a href="/terms">利用規約</a>
+      <a href="https://github.com/Yamamoto-Shohei/google-calendar-sync">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div class="hero">
+    <div class="wrap">
+      <h1>複数の Google カレンダーの<br>「予定あり」だけを同期する</h1>
+      <p class="lead">
+        予定のタイトルも参加者も持ち出さずに、空き時間だけを揃えます。
+        アカウントをまたいだダブルブッキングを防ぐための、オープンソースのツールです。
+      </p>
+      <ul class="badges">
+        <li>双方向・3アカウント以上に対応</li>
+        <li>予定の内容は転記しない</li>
+        <li>MIT ライセンス</li>
+        <li>自分の環境で動かす</li>
+      </ul>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <h2>なぜ必要か</h2>
+      <p>
+        仕事用・個人用・副業用とアカウントが増えると、それぞれのカレンダーは互いの予定を知りません。
+        空いていると思って入れた打ち合わせが、別のアカウントの予定と重なります。
+      </p>
+      <p>
+        かといって、会社の予定の内容をそのまま個人のカレンダーに流し込むのは避けたいはずです。
+        必要なのは「ここは埋まっている」という情報だけで、誰と何を話すかという情報まで共有する必要はありません。
+        CalMesh が同期するのは、その <strong>時間の占有状況だけ</strong>です。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>何をするか</h2>
+      <p>
+        接続した各カレンダーの予定を読み取り、他のカレンダーに「予定あり」というブロックだけを作成します。
+        元の予定が動けばブロックも追従し、元が消えればブロックも消えます。
+        3つ以上のアカウントを接続した場合は、すべての組み合わせに対してメッシュ状に同期します。
+      </p>
+      <p>
+        作成されたブロックは色と識別用のマーカーで元の予定と区別され、同期の対象からは除外されるため、
+        ブロックがさらにブロックを生むことはありません。
+      </p>
+
+      <h3>転記する情報と、しない情報</h3>
+      <table class="data-table">
+        <tbody>
+          <tr>
+            <th>転記する</th>
+            <td>開始時刻・終了時刻・タイムゾーン / 終日かどうか / 空き時間扱いかどうか</td>
+          </tr>
+          <tr>
+            <th>転記しない</th>
+            <td>
+              予定のタイトル / 説明・本文 / 参加者とそのメールアドレス / 場所 /
+              会議の URL / 添付ファイル / 返信状況
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        ブロックのタイトルには、利用者が決めた固定の文言（既定では「予定あり」）が入ります。
+        元の予定のタイトルを含めたい場合だけ、設定でそう指定できます。
+      </p>
+
+      <h3>同期しない予定</h3>
+      <ul>
+        <li>「空き時間」として登録された予定</li>
+        <li>自分が辞退した予定</li>
+        <li>勤務場所（ワーキングロケーション）</li>
+        <li>CalMesh 自身が作成したブロック</li>
+        <li>設定した最小時間より短い予定</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>使い方</h2>
+      <ol class="steps">
+        <li>
+          <strong>Google アカウントを接続する</strong>
+          同期したいアカウントを順に認証します。カレンダーの読み取りと、ブロックの書き込みに使います。
+        </li>
+        <li>
+          <strong>ラベルと範囲を決める</strong>
+          どのカレンダーからどのカレンダーへ、どんな名前のブロックを作るかを設定します。
+          対象は直近から3か月先までです。
+        </li>
+        <li>
+          <strong>定期実行に任せる</strong>
+          15分ごとに同期します。自分の PC で動かすほか、GitHub Actions のスケジュールで
+          PC を閉じていても動かせます。
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>データはどこにあるか</h2>
+      <div class="note">
+        <p>
+          <strong>CalMesh にサーバーはありません。</strong>
+          認証情報と設定は、あなたが動かしている環境（自分の PC、または自分の GitHub リポジトリの
+          シークレット）にのみ保存されます。開発者がそれらを受け取ることも、閲覧することもできません。
+        </p>
+        <p>
+          カレンダーの内容がどこかに蓄積されることもありません。実行のたびに Google から読み取り、
+          必要なブロックを書き込んで、そのまま終了します。
+        </p>
+      </div>
+      <p>
+        詳細は<a href="/privacy">プライバシーポリシー</a>に記載しています。
+        ソースコードはすべて公開されているため、実際に何を読み書きしているかは
+        <a href="https://github.com/Yamamoto-Shohei/google-calendar-sync">GitHub</a>
+        で確認できます。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>導入する</h2>
+      <p>
+        Node.js 20 以上が必要です。セットアップの手順はリポジトリの README にあります。
+      </p>
+      <p>
+        <a href="https://github.com/Yamamoto-Shohei/google-calendar-sync">github.com/Yamamoto-Shohei/google-calendar-sync</a>
+      </p>
+      <p>
+        不具合の報告や要望は GitHub の Issue、それ以外のお問い合わせは
+        <a href="mailto:support@rcat.app">support@rcat.app</a> までお願いします。
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav>
+      <a href="/privacy">プライバシーポリシー</a>
+      <a href="/terms">利用規約</a>
+      <a href="https://github.com/Yamamoto-Shohei/google-calendar-sync">GitHub</a>
+      <a href="mailto:support@rcat.app">お問い合わせ</a>
+    </nav>
+    <div>CalMesh — MIT License</div>
+  </div>
+</footer>
+
+</body>
+</html>

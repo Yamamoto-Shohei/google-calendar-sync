@@ -1,0 +1,314 @@
+/*
+ * One stylesheet, no build step, no external requests. The OAuth review looks
+ * at these pages directly, and a font or analytics beacon loaded from a third
+ * party would contradict what the privacy policy says.
+ */
+
+:root {
+  --bg: #fdfdfc;
+  --panel: #ffffff;
+  --text: #1d1d1b;
+  --muted: #6b6b66;
+  --line: #e4e4e0;
+  --accent: #2f6f4f;
+  --accent-soft: #eef4f0;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16171a;
+    --panel: #1d1f23;
+    --text: #e8e8e6;
+    --muted: #9a9a95;
+    --line: #2e3137;
+    --accent: #7fc0a0;
+    --accent-soft: #1f2a25;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP',
+    'Yu Gothic', Meiryo, sans-serif;
+  font-size: 16px;
+  line-height: 1.8;
+  /* Japanese text sets better with slightly looser tracking at this size. */
+  letter-spacing: 0.01em;
+}
+
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ---------- header ---------- */
+
+.site-header {
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.site-header .wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 60px;
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.site-header nav {
+  display: flex;
+  gap: 18px;
+  font-size: 14px;
+}
+
+.site-header nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.site-header nav a:hover {
+  color: var(--text);
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  padding: 72px 0 56px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hero h1 {
+  margin: 0 0 20px;
+  font-size: 34px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+}
+
+.hero .lead {
+  margin: 0 0 28px;
+  font-size: 17px;
+  color: var(--muted);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.badges li {
+  font-size: 13px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+/* ---------- sections ---------- */
+
+section {
+  padding: 48px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+section:last-of-type {
+  border-bottom: none;
+}
+
+h2 {
+  margin: 0 0 20px;
+  font-size: 21px;
+  line-height: 1.5;
+}
+
+h3 {
+  margin: 28px 0 10px;
+  font-size: 16px;
+}
+
+p {
+  margin: 0 0 16px;
+}
+
+a {
+  color: var(--accent);
+}
+
+ul,
+ol {
+  margin: 0 0 16px;
+  padding-left: 1.4em;
+}
+
+li {
+  margin-bottom: 8px;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* ---------- data table ---------- */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 16px;
+  font-size: 15px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+}
+
+.data-table th {
+  background: var(--accent-soft);
+  font-weight: 600;
+  width: 34%;
+}
+
+/* ---------- steps ---------- */
+
+.steps {
+  list-style: none;
+  counter-reset: step;
+  margin: 0;
+  padding: 0;
+}
+
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 44px;
+  margin-bottom: 20px;
+}
+
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.steps strong {
+  display: block;
+}
+
+/* ---------- note ---------- */
+
+.note {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  font-size: 15px;
+}
+
+.note p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- legal pages ---------- */
+
+.legal {
+  padding: 56px 0 24px;
+}
+
+.legal h1 {
+  font-size: 27px;
+  margin: 0 0 8px;
+}
+
+.updated {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 36px;
+}
+
+.legal section {
+  padding: 0;
+  border: none;
+  margin-bottom: 36px;
+}
+
+.legal h2 {
+  font-size: 18px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ---------- footer ---------- */
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  padding: 32px 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 600px) {
+  .hero {
+    padding: 52px 0 40px;
+  }
+
+  .hero h1 {
+    font-size: 27px;
+  }
+
+  .data-table th {
+    width: 40%;
+  }
+}
