@@ -8,7 +8,8 @@
     "trailingSlashBehavior": "REMOVE",
     "headers": [
       {
-        "source": "**/*.@(html)",
+        "//": "`**`, not `**/*.html`: header rules match the request path, and cleanUrls means the pages are served from /privacy rather than /privacy.html, so an extension-based pattern silently matches nothing.",
+        "source": "**",
         "headers": [
           { "key": "Cache-Control", "value": "public, max-age=300" },
           { "key": "X-Content-Type-Options", "value": "nosniff" },
