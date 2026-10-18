@@ -120,9 +120,13 @@ Done. Verify with a manual run before trusting the schedule:
   gh workflow run sync.yml --repo $REPO -f dry_run=true
   gh run watch --repo $REPO
 
-The schedule runs twice an hour (1,440 runs/month), which fits the 2,000
-free Actions minutes a private repo gets. Actions bills per run rounded up
-to a minute, so raising the frequency is what costs, not the runtime.
+The bundled workflow is manual-only. To let GitHub own the cadence, add a
+`schedule:` trigger to .github/workflows/sync.yml -- and remove any other
+scheduler, or two of them will write to the same calendars.
+
+Budget it by run count, not runtime: Actions bills each run rounded up to a
+minute, so twice an hour (1,440 runs/month) fits the 2,000 free minutes a
+private repository gets, and every 15 minutes (2,880) does not.
 
 Re-run this script after any configuration change or re-authorisation.
 ────────────────────────────────────────────────────────────────────

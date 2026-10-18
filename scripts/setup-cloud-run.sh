@@ -11,7 +11,8 @@
 # re-authorisation to push the new credentials and redeploy.
 #
 # Usage:
-#   scripts/setup-cloud-run.sh [--project ID] [--region REGION] [--schedule CRON] [--yes]
+#   scripts/setup-cloud-run.sh [--project ID] [--region REGION]
+#                              [--schedule CRON] [--time-zone TZ] [--yes]
 #
 set -euE -o pipefail
 trap 'status=$?; echo "error: aborted at line $LINENO (exit $status)" >&2; exit $status' ERR
@@ -20,6 +21,9 @@ HOME_DIR="${GCAL_SYNC_HOME:-$HOME/.google-calendar-sync}"
 PROJECT=""
 REGION="asia-northeast1"
 SCHEDULE="*/15 * * * *"
+# Only matters for schedules that name an hour; an every-N-minutes cron behaves
+# the same in any zone.
+TIME_ZONE="Asia/Tokyo"
 ASSUME_YES=0
 
 JOB="gcal-sync"
@@ -32,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --project)  PROJECT="$2"; shift 2 ;;
     --region)   REGION="$2"; shift 2 ;;
     --schedule) SCHEDULE="$2"; shift 2 ;;
+    --time-zone) TIME_ZONE="$2"; shift 2 ;;
     -y|--yes)   ASSUME_YES=1; shift ;;
     -h|--help)  awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -127,7 +132,7 @@ Project:   $PROJECT ($PROJECT_NUMBER)
 Region:    $REGION
 Account:   $ACCOUNT
 Auth mode: $AUTH_MODE
-Schedule:  $SCHEDULE (Asia/Tokyo)
+Schedule:  $SCHEDULE ($TIME_ZONE)
 
 Will create or update:
   Secret Manager   $(for f in "${FILES[@]}"; do printf '%s ' "$(secret_name "$f")"; done)
@@ -219,7 +224,7 @@ gcloud scheduler jobs "$VERB" http "$SCHED_JOB" \
   --location "$REGION" \
   --project "$PROJECT" \
   --schedule "$SCHEDULE" \
-  --time-zone "Asia/Tokyo" \
+  --time-zone "$TIME_ZONE" \
   --uri "$URI" \
   --http-method POST \
   --oauth-service-account-email "$SCHED_SA@$PROJECT.iam.gserviceaccount.com" \

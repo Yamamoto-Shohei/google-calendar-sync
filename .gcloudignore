@@ -2,6 +2,7 @@
 # point, keeps local credentials out of a build context by accident.
 .git/
 .github/
+.firebase/
 node_modules/
 site/
 test/

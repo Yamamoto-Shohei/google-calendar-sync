@@ -1,5 +1,9 @@
 node_modules/
 
+# Local deploy cache for the project site. Regenerated on every
+# `firebase deploy`, and only meaningful on the machine that wrote it.
+.firebase/
+
 # Never commit credentials. The real ones live in ~/.google-calendar-sync/,
 # but guard against copies being dropped into the repo during debugging.
 client.json

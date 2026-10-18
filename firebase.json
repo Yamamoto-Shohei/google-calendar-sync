@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "//": "デプロイ先を site 名で固定する。稼働中の rcat.app (サイト rcat-app-8cafe) は別プロジェクトにあり、.firebaserc と合わせて二重に隔離している。",
+    "//": "Pin the deploy target by site name. With the project pinned in .firebaserc as well, `firebase deploy` cannot land on another site that happens to be the default in the active project.",
     "site": "calmesh",
     "public": "site",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],

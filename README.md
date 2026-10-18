@@ -15,6 +15,8 @@
 
 参加カレンダーが3つなら **A→B, A→C, B→A, B→C, C→A, C→B の6方向すべて**を同期します。同期で作られた予定（ミラー）は同期元として扱わないため、ミラーがさらにミラーされて増殖することはありません。
 
+サーバーはありません。すべて自分の環境で動き、認証情報もカレンダーの内容も外部に送信されません（通信先は Google の API のみ）。→ [プライバシーポリシー](https://calmesh.rcat.app/privacy) / [利用規約](https://calmesh.rcat.app/terms)（サイト上では **CalMesh** という名前で公開しています）
+
 ## できること
 
 - 異なる Google アカウント間の双方向・全対全同期
@@ -22,13 +24,16 @@
 - 元予定の変更・削除に次回同期で追従（移動したら移動、消したら消える）
 - 常に「今日から3ヶ月先」だけを同期（過去は同期しない）
 - サービスアカウント / OAuth のどちらでも動作（構築をスクリプト化できるサービスアカウント方式を推奨）
-- 画面で初期設定 → あとはバッチで同期し続ける（ローカルの launchd/cron、または GitHub Actions でサーバレス）
+- 画面で初期設定 → あとはバッチで同期し続ける（ローカルの launchd/cron、または Cloud Run Jobs / GitHub Actions でサーバレス）
 - 内容を一切コピーしないプライバシー設計
 
 ## 必要なもの
 
 - Node.js 20 以上
 - Google Cloud プロジェクト（無料枠で足ります）
+- macOS または Linux
+
+定期実行の登録（`install-cron`）は macOS の launchd と Unix 系の crontab を使うため、**Windows では動きません**。同期本体（`gcal-sync sync`）は Node.js があれば動くので、Windows でタスクスケジューラから叩く構成は可能ですが未検証です。
 
 ## セットアップ
 
@@ -183,7 +188,7 @@ gcal-sync uninstall-cron        # 定期実行を解除
 | 前提 | GCP の課金有効化（カード登録） | なし |
 | 設定 | `scripts/setup-cloud-run.sh` | `scripts/push-secrets.sh` |
 
-GitHub Actions の `schedule` はベストエフォートです。負荷時には遅延ではなく**実行そのものが捨てられます**。さらに、スケジュールは「cron 行を最後に編集したユーザー」の権限で動くため、そのアカウントがリポジトリにアクセスできないと**エラーも通知もないまま一切発火しなくなります**（手動実行と push は正常に動き続けるので、気づきにくい）。確実に回したいなら Cloud Run を選んでください。
+GitHub Actions の `schedule` はベストエフォートで、負荷時には遅延ではなく実行そのものが捨てられます。確実に定時で回したいなら Cloud Run を選んでください（詳しい落とし穴は「[注意点](#注意点)」に挙げています）。
 
 ### Cloud Run Jobs + Cloud Scheduler
 
@@ -199,7 +204,7 @@ scripts/setup-cloud-run.sh --project PROJECT_ID
 2. 認証情報を Secret Manager に保存（認証方式に必要なものだけ）
 3. サービスアカウントを2つ作成 — ジョブ実行用と、スケジューラ用
 4. Cloud Run ジョブをデプロイ（`Dockerfile` からビルド、シークレットは環境変数として注入）
-5. Cloud Scheduler から15分おきに `jobs:run` を叩く設定
+5. Cloud Scheduler から15分おきに `jobs:run` を叩く設定（`--schedule` / `--time-zone` で変更可）
 
 権限は絞ってあります。ジョブ用サービスアカウントには**そのシークレットだけ**の読み取り権限、スケジューラ用には**そのジョブだけ**の実行権限を付与します。
 
@@ -216,9 +221,9 @@ gcloud run jobs executions list --job gcal-sync --region asia-northeast1
 
 この同期は**状態をカレンダーの予定自身に持つ**ため、ホストすべき DB もディスクもありません。ランナーが設定ファイルを Secrets から書き出して `sync` を1回実行するだけで成立します。
 
-> 同梱のワークフロー（`.github/workflows/sync.yml`）は**手動実行のみ**の設定にしてあります。このリポジトリでは Cloud Scheduler が定期実行を担っており、両方に cron を置くと二重に書き込むためです。GitHub Actions だけで運用する場合は、`on:` に `schedule:` を追加してください。
+> **同梱のワークフロー（`.github/workflows/sync.yml`）は手動実行（`workflow_dispatch`）のみ**で、`schedule:` を持っていません。Cloud Run と両方に定期実行を置くと、2つのスケジューラが同じカレンダーに書き込むことになるためです。GitHub Actions に定期実行を任せる場合は、下記の「定期実行を有効にする」に従って `schedule:` を追加してください。
 
-### 設定
+#### 設定
 
 ローカルで `gcal-sync setup` を済ませたうえで:
 
@@ -242,34 +247,51 @@ gh run watch
 
 設定を変更したり再認可したら、`push-secrets.sh` を再実行してください。
 
-### 同期間隔と無料枠
+#### 定期実行を有効にする
 
-**プライベートリポジトリの無料枠は 2,000分/月**で、課金は**1実行あたり1分単位の切り上げ**です。実行時間を縮めても1分未満にはならないため、**コストは実行回数だけで決まります**。
+Cloud Run を使わず GitHub Actions に定期実行を任せる場合は、`.github/workflows/sync.yml` の `on:` に `schedule:` を追加します。
+
+```yaml
+on:
+  schedule:
+    # 30分間隔。毎時 :00 はスケジュールが最も混雑して遅延しやすいのでずらす。
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    # ...（既存の inputs はそのまま）
+```
+
+間隔は無料枠から決めてください。**プライベートリポジトリの無料枠は 2,000分/月**で、課金は**1実行あたり1分単位の切り上げ**です。実行時間を縮めても1分未満にはならないため、**コストは実行回数だけで決まります**。
 
 | 間隔 | 月間実行回数 | 消費分数 | 2,000分の無料枠 |
 | --- | --- | --- | --- |
 | 15分 | 2,880 | 2,880分 | 超過 |
-| **30分（既定）** | **1,440** | **1,440分** | **収まる** |
+| **30分（推奨）** | **1,440** | **1,440分** | **収まる** |
 | 60分 | 720 | 720分 | 余裕 |
 
-既定は `cron: '7,37 * * * *'` の30分間隔です。毎時 :00 はスケジュールが最も混雑して遅延しやすいため、意図的にずらしています。
+15分間隔にするならリポジトリを公開にする必要があります（公開リポジトリは Actions の分数が無制限）。ただし**公開リポジトリは60日間コミットが無いとスケジュールが自動停止**するため、月1回程度の keepalive が別途必要になります。
 
-間隔を変えたい場合は `.github/workflows/sync.yml` の `cron` を編集してください。15分間隔にするならリポジトリを公開にする必要があります（公開リポジトリは Actions の分数が無制限）。ただし**公開リポジトリは60日間コミットが無いとスケジュールが自動停止**するため、月1回程度の keepalive が別途必要になります。
+#### 注意点
 
-### 注意点
-
-- **Actions の cron は遅延し、落ちます。** 数分〜数十分ずれるだけでなく、負荷時には実行自体がスキップされます。同期は冪等なので壊れはしませんが、「30分ごと」は保証されません。
+- **Actions の cron は遅延し、落ちます。** 数分〜数十分ずれるだけでなく、負荷時には実行自体がスキップされます。同期は冪等なので壊れはしませんが、設定した間隔は保証されません。
 - **cron 行の所有者に注意してください。** スケジュールは cron 行を最後に編集したユーザーの権限で実行されます。そのアカウントがリポジトリにアクセスできないと、`state` は `active` のまま、手動実行も push も成功するのに、スケジュールだけが無言で発火しなくなります。コミットのメールアドレスが別アカウントに紐付いている場合に起こります（`gh api repos/OWNER/REPO/commits/SHA --jq .author.login` で確認できます）。
 - **Secrets は全カレンダーへの読み書き権限を持ちます。** 自分が管理するリポジトリでのみ使ってください。
 - ワークフローは `concurrency` で多重実行を防いでいます（ランナー間ではローカルのロックファイルが効かないため）。
 - `doctor` は手動実行時に `doctor` 入力を有効にしたときだけ走ります。カレンダー ID（＝メールアドレス）を出力するため、公開リポジトリでは実行ログから読めてしまうので既定はオフです。
 - 同期が失敗すると GitHub から通知メールが届きます（終了コードが非ゼロになるため）。
 
-### ローカル実行との併用
+### 複数のスケジューラを同時に動かさない
 
-PC 側の `install-cron` と同時に有効にしても壊れません（同期は冪等です）が、無駄に API を叩くので、サーバレスに移すなら `gcal-sync uninstall-cron` でローカルのスケジュールを解除しておくのが無難です。
+ローカルの `install-cron`・Cloud Scheduler・Actions の `schedule` は、どれか1つだけを有効にしてください。同期は冪等なので**同時に動いても壊れませんが**、無駄に API を叩き、ログが二重になります。移行するときは前のスケジュールを必ず解除してください。
 
-なお `config.json` に絶対パスを残さないため、サービスアカウント方式では `auth.keyFile` を省略するのが推奨です（省略すると設定ディレクトリ内の標準パスに解決されるので、同じ `config.json` がローカルでもランナーでも通ります）。`GCAL_SERVICE_ACCOUNT_KEY_FILE` 環境変数で上書きもできます。
+| 移行先 | 解除するもの |
+| --- | --- |
+| Cloud Run | `gcal-sync uninstall-cron`、ワークフローの `schedule:` を外す |
+| GitHub Actions | `gcal-sync uninstall-cron`、`gcloud scheduler jobs delete gcal-sync-tick --location REGION` |
+| ローカル | ワークフローの `schedule:` を外す、Cloud Scheduler のジョブを削除 |
+
+### 設定ファイルの可搬性
+
+サービスアカウント方式では、`config.json` に絶対パスを残さないよう `auth.keyFile` を省略するのが推奨です（省略すると設定ディレクトリ内の標準パスに解決されるので、同じ `config.json` がローカルでもランナーでも通ります）。`GCAL_SERVICE_ACCOUNT_KEY_FILE` 環境変数で上書きもできます。
 
 ## 仕組み
 
@@ -318,14 +340,14 @@ PC 側の `install-cron` と同時に有効にしても壊れません（同期�
 
 | ファイル | 内容 | 秘密情報 |
 | --- | --- | --- |
-| `config.json` | アカウント・カレンダー・文言・フィルタ | 含まない |
+| `config.json` | アカウント・カレンダー・文言・フィルタ | 認証情報は含まない（メールアドレス・カレンダー ID は含む） |
 | `tokens.json` | リフレッシュトークン（OAuth 方式） | **含む** |
 | `client.json` | OAuth クライアント ID / シークレット | **含む** |
 | `service-account.json` | サービスアカウントの秘密鍵 | **含む** |
 | `last-run.json` | 前回実行の結果 | 含まない |
-| `sync.log` | バッチ実行のログ | 含まない |
+| `sync.log` | バッチ実行のログ（方向 ID・件数・文言） | 含まない |
 
-`config.json` には秘密情報が入らない（メールアドレス・カレンダー ID・文言のみ）ので、リポジトリで管理できます。秘密情報は上記の別ファイルに分離してあり、`.gitignore` 済みです。
+認証情報は `config.json` から別ファイルに分離してあります。上記のファイルはすべて `.gitignore` 済みですが、`config.json` 自体にもメールアドレスとカレンダー ID が入るため、**公開リポジトリにコミットしないでください**。サーバレス運用では Secrets / Secret Manager 経由で渡します。
 
 `GCAL_SYNC_HOME` 環境変数で場所を変えられます（独立した複数のメッシュを運用する場合など）。
 
@@ -407,6 +429,47 @@ OAuth 方式の全体例:
 }
 ```
 
+### 設定キー
+
+| キー | 既定 | 内容 |
+| --- | --- | --- |
+| `auth.mode` | `"oauth"` | `"oauth"` または `"service-account"` |
+| `auth.keyFile` | `null` | サービスアカウント鍵のパス。省略時は設定ディレクトリの `service-account.json` |
+| `window.futureMonths` | `3` | 同期する未来の月数（1〜24）。過去は常に同期しない |
+| `syncIntervalMinutes` | `15` | `install-cron` が登録する実行間隔（分）。サーバレス運用では使われません |
+| `defaultLabel` | `"予定あり"` | `labels` に指定のない方向で使う文言 |
+| `accounts[]` | `[]` | OAuth 方式で認可したアカウント（`id`, `email`）。サービスアカウント方式では空 |
+| `members[]` | `[]` | 同期に参加するカレンダー（下記） |
+| `labels` | `{}` | 方向 ID（`A->B`）ごとの文言 |
+| `filters` | — | 同期しない予定の条件（下記） |
+| `visibility` | `"private"` | ミラーの公開範囲。Google カレンダーの `visibility` をそのまま渡します |
+| `reminders` | `"none"` | `"none"` でミラーの通知を無効化。それ以外はカレンダーの既定通知 |
+| `annotateDescription` | `true` | ミラーの詳細欄に「自動作成した予定」である旨の注記（固定の日本語文）を入れる |
+| `mirrorColorId` | `"8"` | `writeMode: "primary"` のときだけ付く色 ID（Google カレンダーの色番号） |
+| `safety.maxDeletesPerPairPerRun` | `100` | 1回・1方向あたりの削除上限 |
+
+`members[]` の各要素:
+
+| キー | 内容 |
+| --- | --- |
+| `id` | メッシュ内の識別子（`A` など）。方向 ID に使われるため `->` は使えません |
+| `label` | 表示名。`{calendarName}` トークンに展開されます |
+| `accountId` | OAuth 方式で、どの `accounts[]` を使うか |
+| `sourceCalendarId` | 同期元のカレンダー ID。サービスアカウント方式では `"primary"` 不可 |
+| `writeMode` | `"subcalendar"`（専用カレンダーに書く）または `"primary"`（送信先のメインに直接） |
+| `mirrorCalendarId` | ミラーの書き込み先。`writeMode: "subcalendar"` では必須 |
+| `enabled` | `false` にするとメッシュから外れます（設定は残ります） |
+
+### 環境変数
+
+| 変数 | 既定 | 用途 |
+| --- | --- | --- |
+| `GCAL_SYNC_HOME` | `~/.google-calendar-sync` | 設定・認証情報の置き場所。独立した複数のメッシュを運用する場合に変更 |
+| `GCAL_SYNC_PORT` | `4765` | 設定画面と OAuth リダイレクトのポート |
+| `GCAL_SYNC_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error`（`--verbose` は `debug` と同じ） |
+| `GCAL_SERVICE_ACCOUNT_KEY_FILE` | — | サービスアカウント鍵のパスを上書き（`auth.keyFile` より優先） |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | OAuth クライアントを `client.json` の代わりに環境変数で渡す |
+
 ### 文言の差し込みトークン
 
 固定文字列のほか、以下が使えます。
@@ -485,11 +548,33 @@ OAuth 同意画面が「テスト中」のままです。「本番環境に push
 ## 開発
 
 ```bash
-npm test          # 72 件のユニット/結合テスト（Google API への通信は行いません）
+npm install
+npm test          # ユニット/結合テスト（Google API への通信は行いません）
 ```
 
-テストは `test/helpers.js` のインメモリ版 Calendar API を使い、同期エンジンの冪等性・ループ防止・削除安全弁を検証しています。
+テストは `test/helpers.js` のインメモリ版 Calendar API を使い、同期エンジンの冪等性・ループ防止・削除安全弁を検証しています。外部依存は `googleapis` のみで、ビルド手順はありません。
+
+| ディレクトリ | 内容 |
+| --- | --- |
+| `src/` | CLI・同期エンジン・設定画面（`ui.html` と `server.js`） |
+| `scripts/` | GCP / Cloud Run / GitHub Actions のセットアップ用スクリプト |
+| `test/` | インメモリ Calendar API によるテスト |
+| `site/` | プロジェクトサイト（下記） |
+
+### プロジェクトサイト
+
+`site/` は [CalMesh](https://calmesh.rcat.app/) として公開しているプライバシーポリシー・利用規約のページで、OAuth 同意画面に登録する URL の掲載先です。`firebase.json` と `.firebaserc` はこのサイトの Firebase Hosting へのデプロイ設定で、**リポジトリ作者のプロジェクトを指しています**。フォークして自分で公開する場合は `.firebaserc` の `projects.default` と `firebase.json` の `site` を自分のものに差し替えてください。同期機能そのものはサイトに一切依存しません。
+
+## 貢献
+
+不具合の報告・提案は [Issue](https://github.com/Yamamoto-Shohei/google-calendar-sync/issues) へお願いします。Pull Request を送る場合は、`npm test` が通ることを確認してください（新しい挙動には対応するテストを添えてください）。
+
+カレンダーを壊しうるツールなので、同期ロジックの変更には必ず `test/` のケースを追加してください。動作確認は本番のカレンダーではなく、捨ててよいカレンダーと `--dry-run` で行ってください。
+
+## セキュリティ
+
+脆弱性を見つけた場合は、公開 Issue ではなく [support@rcat.app](mailto:support@rcat.app) までご連絡ください。資格情報の置き場所と責任範囲は [SECURITY.md](SECURITY.md) にまとめています。
 
 ## ライセンス
 
-MIT
+MIT（[LICENSE](LICENSE)）。カレンダーの予定を作成・更新・削除するツールであり、無保証です。重要な予定を含むカレンダーで使う場合は、必ず `--dry-run` で確認してから実行してください。

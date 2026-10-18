@@ -2,6 +2,21 @@
   "name": "google-calendar-sync",
   "version": "0.1.0",
   "description": "Sync only the busy time blocks between Google Calendars across multiple accounts, bidirectionally.",
+  "keywords": [
+    "google-calendar",
+    "calendar-sync",
+    "busy-time",
+    "privacy",
+    "cli"
+  ],
+  "homepage": "https://github.com/Yamamoto-Shohei/google-calendar-sync#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yamamoto-Shohei/google-calendar-sync.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Yamamoto-Shohei/google-calendar-sync/issues"
+  },
   "license": "MIT",
   "type": "module",
   "bin": {
