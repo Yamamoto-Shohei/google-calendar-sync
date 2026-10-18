@@ -647,11 +647,23 @@ $('save-client').addEventListener('click', async () => {
 
 $('add-account').addEventListener('click', async () => {
   const status = $('auth-status');
+  // Claim the popup synchronously, while we still hold the user gesture.
+  // Opening it after the await below loses that context and browsers block it.
+  const popup = window.open('', '_blank');
   try {
     const before = state.accounts.length;
     const { url } = await api('POST', '/api/accounts/start');
-    window.open(url, '_blank', 'noopener');
-    status.textContent = 'ブラウザで Google の認可画面を開きました…';
+
+    if (popup && !popup.closed) {
+      popup.location = url;
+      status.textContent = 'ブラウザで Google の認可画面を開きました…';
+    } else {
+      // Blocked anyway, or popups are disabled: a plain link always works.
+      status.replaceChildren(
+        el('span', { text: 'ポップアップがブロックされました。' }),
+        el('a', { href: url, target: '_blank', rel: 'noopener', text: 'ここをクリックして認可してください' }),
+      );
+    }
     // The callback lands on the server, not here, so watch for the new account.
     for (let i = 0; i < 150; i += 1) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -663,6 +675,8 @@ $('add-account').addEventListener('click', async () => {
     }
     status.textContent = 'タイムアウトしました。もう一度お試しください。';
   } catch (err) {
+    // Do not leave the blank tab we claimed sitting there.
+    if (popup && !popup.closed) popup.close();
     status.textContent = '';
     report(err);
   }
