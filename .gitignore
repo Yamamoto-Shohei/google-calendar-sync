@@ -8,6 +8,9 @@ config.json
 last-run.json
 service-account.json
 *-service-account.json
+# Google Cloud hands you the OAuth client as client_secret_<id>.json, which
+# lands in whatever directory the browser downloads to.
+client_secret*.json
 *.pem
 *.p12
 .env
