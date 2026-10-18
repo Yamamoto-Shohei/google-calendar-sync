@@ -17,7 +17,7 @@ export const PROP = {
 export const MARKER_VALUE = '1';
 
 /**
- * Third-party blocking services (Lynx and the like) tag their holds with this.
+ * Third-party calendar-blocking services tag their holds with this property.
  * Not our marker, so without an explicit check their blocks look like ordinary
  * meetings and get mirrored -- and because such a service writes a block onto
  * every account in parallel, one real meeting turns into nine entries across
