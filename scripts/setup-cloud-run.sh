@@ -41,6 +41,24 @@ done
 die()  { trap - ERR; echo "error: $*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }
 
+# A service account is not immediately visible to IAM policy updates: for a few
+# seconds after creation, bindings that reference it fail with "does not exist".
+# Retrying is the fix; making the operator re-run the script is not.
+retry() {
+  local attempts="$1"; shift
+  local delay=2 i=1
+  until "$@"; do
+    if (( i >= attempts )); then
+      echo "error: \`$1\` still failing after $attempts attempts." >&2
+      return 1
+    fi
+    echo "  retrying in ${delay}s (attempt $i/$attempts)..." >&2
+    sleep "$delay"
+    i=$(( i + 1 ))
+    delay=$(( delay * 2 ))
+  done
+}
+
 command -v gcloud >/dev/null 2>&1 || die \
   "gcloud not found. Install the Google Cloud CLI: https://cloud.google.com/sdk/docs/install"
 
@@ -159,7 +177,7 @@ done
 # Read access per secret rather than project-wide: the job should not be able to
 # read a secret that someone adds to this project later.
 for f in "${FILES[@]}"; do
-  gcloud secrets add-iam-policy-binding "$(secret_name "$f")" \
+  retry 5 gcloud secrets add-iam-policy-binding "$(secret_name "$f")" \
     --member "serviceAccount:$JOB_SA@$PROJECT.iam.gserviceaccount.com" \
     --role roles/secretmanager.secretAccessor \
     --project "$PROJECT" >/dev/null
@@ -184,7 +202,7 @@ gcloud run jobs deploy "$JOB" \
   --cpu 1
 
 # Only this job, not every service in the project.
-gcloud run jobs add-iam-policy-binding "$JOB" \
+retry 5 gcloud run jobs add-iam-policy-binding "$JOB" \
   --member "serviceAccount:$SCHED_SA@$PROJECT.iam.gserviceaccount.com" \
   --role roles/run.invoker \
   --region "$REGION" \

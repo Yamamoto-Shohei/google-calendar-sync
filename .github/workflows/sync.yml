@@ -7,15 +7,16 @@ name: sync
 # the number of runs, not their duration. Twice an hour is 1,440 runs/month,
 # which fits the 2,000 free minutes a private repo gets. Every 15 minutes would
 # be 2,880 and overrun it.
+# No `schedule:` here on purpose. Cloud Scheduler owns the cadence (see
+# scripts/setup-cloud-run.sh); leaving a cron here as well would mean two
+# schedulers writing to the same calendars the moment GitHub's started
+# working. Manual runs stay, as a way to sync from anywhere.
+#
+# If you do want GitHub to own the schedule, add `schedule:` back -- and know
+# that the trigger is best effort (ticks are dropped under load) and that it
+# runs as whoever last edited the cron line, firing nothing at all, silently,
+# if that account cannot reach the repository.
 on:
-  schedule:
-    # Offset from :00, where scheduled workflows queue the longest.
-    #
-    # Whoever last edits this line owns the schedule: GitHub runs it as that
-    # user, and if they cannot reach the repository it silently never fires --
-    # no error, no notification, `state` still "active", while push and manual
-    # triggers keep working. Keep this line owned by an account with access.
-    - cron: '8,38 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:

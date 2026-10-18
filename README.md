@@ -216,6 +216,8 @@ gcloud run jobs executions list --job gcal-sync --region asia-northeast1
 
 この同期は**状態をカレンダーの予定自身に持つ**ため、ホストすべき DB もディスクもありません。ランナーが設定ファイルを Secrets から書き出して `sync` を1回実行するだけで成立します。
 
+> 同梱のワークフロー（`.github/workflows/sync.yml`）は**手動実行のみ**の設定にしてあります。このリポジトリでは Cloud Scheduler が定期実行を担っており、両方に cron を置くと二重に書き込むためです。GitHub Actions だけで運用する場合は、`on:` に `schedule:` を追加してください。
+
 ### 設定
 
 ローカルで `gcal-sync setup` を済ませたうえで:
