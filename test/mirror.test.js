@@ -176,6 +176,23 @@ test('skipReason rejects mirrors, cancelled and filtered events', () => {
   assert.equal(skipReason({ status: 'confirmed' }, filters), 'no-time');
 });
 
+test('holds written by another blocking service are not mirrored', () => {
+  const { filters } = makeConfig();
+  const base = { start: { dateTime: '2026-10-20T14:00:00+09:00' }, end: { dateTime: '2026-10-20T15:00:00+09:00' } };
+  const block = { ...base, extendedProperties: { private: { block_event_type: 'block' } } };
+
+  assert.equal(skipReason(block, filters), 'external-block');
+  // Mirroring these is what turns one meeting into nine entries across three
+  // calendars, so the guard holds even for a filters object that predates it.
+  assert.equal(skipReason(block, {}), 'external-block');
+  assert.equal(skipReason(block, { ...filters, skipExternalBlocks: false }), null);
+  // A private property of some other name must not trip it.
+  assert.equal(
+    skipReason({ ...base, extendedProperties: { private: { block_event_type: 'focus' } } }, filters),
+    null,
+  );
+});
+
 test('duration and all-day filters are honoured when enabled', () => {
   const filters = { skipAllDay: true, minDurationMinutes: 60 };
   assert.equal(skipReason(allDayEvent({ id: 'e', date: '2026-10-20', endDate: '2026-10-21' }), filters), 'all-day');

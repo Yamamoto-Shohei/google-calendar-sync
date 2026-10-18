@@ -26,6 +26,10 @@ on:
         description: 'Verbose logging'
         type: boolean
         default: false
+      doctor:
+        description: 'Check calendar access first (prints calendar ids, i.e. email addresses, into a world-readable log)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -108,10 +112,12 @@ jobs:
           '
 
       - name: Verify calendar access
-        # Manual runs only. On the schedule this would add an API round trip
-        # per calendar every half hour, and a transient failure would block a
-        # sync that would otherwise have worked.
-        if: github.event_name == 'workflow_dispatch'
+        # Opt-in, not "every manual run": doctor prints each calendar id, which
+        # is an email address, and in a public repository the run log is
+        # world-readable. Keeping it off the schedule also avoids an API round
+        # trip per calendar every half hour, where a transient failure would
+        # block a sync that would otherwise have worked.
+        if: inputs.doctor
         run: node src/cli.js doctor
 
       - name: Sync

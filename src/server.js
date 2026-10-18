@@ -395,6 +395,7 @@ export async function startSetupServer({ port = DEFAULT_PORT } = {}) {
           skipDeclined: Boolean(body.filters.skipDeclined),
           skipTransparent: Boolean(body.filters.skipTransparent),
           skipWorkingLocation: Boolean(body.filters.skipWorkingLocation),
+          skipExternalBlocks: Boolean(body.filters.skipExternalBlocks),
           minDurationMinutes: Math.max(0, Number(body.filters.minDurationMinutes) || 0),
         };
       }

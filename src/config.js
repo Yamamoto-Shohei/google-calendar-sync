@@ -23,6 +23,7 @@ export const DEFAULT_CONFIG = {
     skipDeclined: true,
     skipTransparent: true,
     skipWorkingLocation: true,
+    skipExternalBlocks: true,
     minDurationMinutes: 0,
   },
   visibility: 'private',

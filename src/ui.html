@@ -217,6 +217,7 @@
       <span class="check"><input id="f-transparent" type="checkbox"><label for="f-transparent" style="margin:0">「空き時間」扱いの予定を除外</label></span>
       <span class="check"><input id="f-allday" type="checkbox"><label for="f-allday" style="margin:0">終日予定を除外</label></span>
       <span class="check"><input id="f-working" type="checkbox"><label for="f-working" style="margin:0">勤務場所（working location）を除外</label></span>
+      <span class="check"><input id="f-extblock" type="checkbox"><label for="f-extblock" style="margin:0">他のブロックサービスが作った予定を除外</label></span>
       <span class="check"><input id="f-annotate" type="checkbox"><label for="f-annotate" style="margin:0">ミラーに「自動作成」の注記を入れる</label></span>
       <div style="max-width:14rem"><label for="f-minutes">この分数未満の予定を除外</label><input id="f-minutes" type="number" min="0"></div>
     </div>
@@ -519,6 +520,7 @@ function renderSettings() {
   $('f-transparent').checked = config.filters.skipTransparent;
   $('f-allday').checked = config.filters.skipAllDay;
   $('f-working').checked = config.filters.skipWorkingLocation;
+  $('f-extblock').checked = config.filters.skipExternalBlocks !== false;
   $('f-annotate').checked = config.annotateDescription !== false;
   $('f-minutes').value = config.filters.minDurationMinutes;
 }
@@ -716,6 +718,7 @@ $('save-config').addEventListener('click', async () => {
         skipTransparent: $('f-transparent').checked,
         skipAllDay: $('f-allday').checked,
         skipWorkingLocation: $('f-working').checked,
+        skipExternalBlocks: $('f-extblock').checked,
         minDurationMinutes: Number($('f-minutes').value),
       },
     });

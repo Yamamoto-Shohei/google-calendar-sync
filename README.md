@@ -355,6 +355,7 @@ OAuth 方式の全体例:
     "skipDeclined": true,
     "skipTransparent": true,
     "skipWorkingLocation": true,
+    "skipExternalBlocks": true,
     "minDurationMinutes": 0
   },
   "visibility": "private",
@@ -386,9 +387,12 @@ OAuth 方式の全体例:
 | `skipTransparent` | `true` | 「空き時間」扱いの予定を同期しない |
 | `skipAllDay` | `false` | 終日予定を同期しない |
 | `skipWorkingLocation` | `true` | 勤務場所（在宅／出社）の登録を同期しない |
+| `skipExternalBlocks` | `true` | 他のブロックサービスが作った予定を同期しない |
 | `minDurationMinutes` | `0` | この分数未満の予定を同期しない |
 
 フィルタを後から有効にすると、対象外になった予定のミラーは次回同期で削除されます。
+
+`skipExternalBlocks` は、時間を自動でブロックする別サービス（Lynx など）を併用している場合に効きます。この種のサービスは**同じ予定に対して全アカウントへ同時にブロックを書き込む**ため、それを本ツールがミラーすると増幅が起きます。3アカウントなら、1件の打ち合わせが「元の予定 + ブロック2件 + それぞれのミラー6件」で9件に膨らみます。判定は Google カレンダーの `extendedProperties.private.block_event_type` が `"block"` かどうかで行います。
 
 ## プライバシー
 

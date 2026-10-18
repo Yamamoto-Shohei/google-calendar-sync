@@ -16,12 +16,27 @@ export const PROP = {
 
 export const MARKER_VALUE = '1';
 
+/**
+ * Third-party blocking services (Lynx and the like) tag their holds with this.
+ * Not our marker, so without an explicit check their blocks look like ordinary
+ * meetings and get mirrored -- and because such a service writes a block onto
+ * every account in parallel, one real meeting turns into nine entries across
+ * three calendars: the original, two blocks, and six mirrors of those.
+ */
+const EXTERNAL_BLOCK_PROP = 'block_event_type';
+const EXTERNAL_BLOCK_VALUE = 'block';
+
 const MIRROR_NOTE =
   'google-calendar-sync が自動作成した予定です。手で編集しても次回の同期で上書きされます。';
 
 /** True for events this tool created. Mirrors must never be used as a sync source. */
 export function isMirror(event) {
   return event?.extendedProperties?.private?.[PROP.MARKER] === MARKER_VALUE;
+}
+
+/** True for a hold written by another calendar-blocking service. */
+export function isExternalBlock(event) {
+  return event?.extendedProperties?.private?.[EXTERNAL_BLOCK_PROP] === EXTERNAL_BLOCK_VALUE;
 }
 
 function isAllDay(event) {
@@ -52,6 +67,9 @@ function selfResponse(event) {
  */
 export function skipReason(event, filters) {
   if (isMirror(event)) return 'mirror';
+  // Defaults on, and tolerant of a partial filters object: the whole point is
+  // to hold even when nobody thought to enable it.
+  if (filters.skipExternalBlocks !== false && isExternalBlock(event)) return 'external-block';
   if (event.status === 'cancelled') return 'cancelled';
   if (!event.start || !event.end) return 'no-time';
   if (filters.skipWorkingLocation && event.eventType === 'workingLocation') {
