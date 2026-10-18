@@ -324,7 +324,18 @@ function renderServiceAccount() {
 
   const info = state.serviceAccount;
   if (!info) {
-    host.append(el('div', { class: 'note warn', text: '鍵ファイルが未登録です。' }));
+    const found = state.detectedKeyFile;
+    if (found) {
+      // setup-gcp.sh already wrote a key here; pre-fill so "登録" is one click.
+      $('sa-key').value = found.path;
+      host.append(el('div', { class: 'note ok' }, [
+        el('div', { text: `鍵ファイルを検出しました: ${found.path}` }),
+        el('div', {}, [el('span', { text: '共有先アドレス: ' }), el('code', { text: found.clientEmail })]),
+        el('div', { text: '「登録」を押すと使用します。' }),
+      ]));
+    } else {
+      host.append(el('div', { class: 'note warn', text: '鍵ファイルが未登録です。' }));
+    }
     hint.append(el('span', { text: 'まず上で鍵ファイルを登録してください。' }));
     return;
   }

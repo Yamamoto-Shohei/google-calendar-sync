@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { google } from 'googleapis';
-import { files } from './paths.js';
+import { files, homeDir } from './paths.js';
 import { readJson, writeJson } from './store.js';
 
 /**
@@ -114,6 +114,25 @@ export function authClientForAccount(accountId) {
     if (Object.keys(next).length) storeAccountTokens(accountId, next);
   });
   return client;
+}
+
+/** Where scripts/setup-gcp.sh writes the key by default. */
+export function defaultServiceAccountKeyPath() {
+  return path.join(homeDir(), 'service-account.json');
+}
+
+/**
+ * Look for a key at the default path, so a fresh setup-gcp.sh run does not
+ * make the user retype a path the script just printed.
+ */
+export function detectServiceAccountKey() {
+  const candidate = defaultServiceAccountKeyPath();
+  if (!fs.existsSync(candidate)) return null;
+  try {
+    return readServiceAccountKey(candidate);
+  } catch {
+    return null;
+  }
 }
 
 export function expandHome(filePath) {

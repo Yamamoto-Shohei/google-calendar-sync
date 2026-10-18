@@ -7,6 +7,7 @@ import { checkCalendarAccess, checkMeshAccess } from './access.js';
 import {
   DEFAULT_PORT,
   authClientForConfig,
+  detectServiceAccountKey,
   consentUrl,
   forgetAccountTokens,
   loadClientCredentials,
@@ -183,9 +184,13 @@ export async function startSetupServer({ port = DEFAULT_PORT } = {}) {
           serviceAccount = { path: config.auth.keyFile, error: errorMessage(err), ok: false };
         }
       }
+      // setup-gcp.sh writes the key to a known path; offer it rather than
+      // making the user retype what the script just printed.
+      const detected = config.auth?.keyFile ? null : detectServiceAccountKey();
       return {
         authMode: config.auth?.mode || 'oauth',
         serviceAccount,
+        detectedKeyFile: detected ? { path: detected.path, clientEmail: detected.clientEmail } : null,
         hasClientCredentials: Boolean(loadClientCredentials()),
         config: { ...config, labels: normaliseLabels(config) },
         pairs: expandPairs(config).map((p) => ({

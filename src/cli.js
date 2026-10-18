@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { checkMeshAccess } from './access.js';
 import {
   authClientForConfig,
+  detectServiceAccountKey,
   isAuthError,
   loadClientCredentials,
   loadTokens,
@@ -181,7 +182,16 @@ async function cmdStatus() {
 
   const config = loadConfig();
   if (!config) {
-    log.info(`OAuth client: ${loadClientCredentials() ? 'configured' : 'MISSING - run setup'}`);
+    // Point at whichever credential is already on disk, rather than reporting
+    // the OAuth client as missing when a service account key is sitting there.
+    const detected = detectServiceAccountKey();
+    if (detected) {
+      log.info('Service account key found, not yet registered:');
+      log.info(`  key:     ${detected.path}`);
+      log.info(`  address: ${detected.clientEmail}`);
+    } else {
+      log.info(`OAuth client: ${loadClientCredentials() ? 'configured' : 'MISSING - run setup'}`);
+    }
     log.info('Config: none yet. Run `gcal-sync setup`.');
     return EXIT.CONFIG;
   }
